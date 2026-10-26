@@ -416,8 +416,41 @@ NVN(nvnTextureWriteTexels) {  // (texture, view, region, data): linear data into
     }
 }
 NVN(nvnTextureWriteTexelsStrided) { LOG("[nvn] WriteTexelsStrided not implemented\n"); (void)c; }
-NVN(nvnTextureReadTexels) { LOG("[nvn] ReadTexels not implemented\n"); (void)c; }
-NVN(nvnTextureReadTexelsStrided) { (void)c; }
+// Texels out of the texture's guest storage (what the CPU put there, or the game's own data): the character creation
+// colour bars are read this way (the cursor's colour becomes the skin / hair colour), and a no-op left them black.
+// Region: xoffset, yoffset, zoffset, width, height, depth. Output rows are packed unless a stride is given.
+static void read_texels(NvnTexture *t, uint64_t view, uint64_t region, uint8_t *dst, uint64_t row_stride, uint64_t img_stride) {
+    if (!t || !region || !dst || !t->addr) return;
+    const FormatInfo *f = t->layout.fmt;
+    if (!f || f->bw != 1 || f->bh != 1) { LOG("[nvn] ReadTexels of a compressed format not implemented\n"); return; }
+    const int32_t *r = (const int32_t *)G2H((uint32_t)region);
+    uint32_t level = (view && (G(uint32_t, view, 0) & 1)) ? G(uint16_t, view, 4) : 0;
+    LevelLayout l = tegra_level(&t->layout, level);
+    uint32_t x0 = (uint32_t)r[0], y0 = (uint32_t)r[1], z0 = (uint32_t)r[2];
+    uint32_t w = (uint32_t)r[3], h = (uint32_t)r[4], d = r[5] > 0 ? (uint32_t)r[5] : 1;
+    if (x0 + w > l.w || y0 + h > l.h || z0 + d > (l.d ? l.d : 1)) { LOG("[nvn] ReadTexels region outside the level\n"); return; }
+    uint32_t bpb = f->bpb;
+    if (!row_stride) row_stride = (uint64_t)w * bpb;
+    if (!img_stride) img_stride = row_stride * h;
+    const uint8_t *src = (const uint8_t *)G2H((uint32_t)t->addr) + l.offset;
+    uint64_t row_bytes = (uint64_t)l.wb * bpb;
+    uint8_t *lin = NULL;
+    if (!t->stride) {  // block-linear: unswizzle the level, then cut the region out
+        lin = malloc(row_bytes * l.hb * (l.d ? l.d : 1));
+        if (!lin) return;
+        tegra_deswizzle(src, lin, l.wb, l.hb, l.d ? l.d : 1, bpb, l.block_height_log2, l.block_depth_log2);
+        src = lin;
+    } else {
+        row_bytes = t->stride;
+    }
+    for (uint32_t z = 0; z < d; z++)
+        for (uint32_t y = 0; y < h; y++)
+            memcpy(dst + z * img_stride + y * row_stride,
+                   src + ((uint64_t)(z0 + z) * l.hb + y0 + y) * row_bytes + (uint64_t)x0 * bpb, (uint64_t)w * bpb);
+    free(lin);
+}
+NVN(nvnTextureReadTexels) { read_texels(HOST(NvnTexture, A(0)), A(1), A(2), AP(3), 0, 0); }
+NVN(nvnTextureReadTexelsStrided) { read_texels(HOST(NvnTexture, A(0)), A(1), A(2), AP(3), A(4), A(5)); }
 
 // ================================================================== samplers
 // SamplerBuilder: device@0 then an NvnSamplerDesc at 8
