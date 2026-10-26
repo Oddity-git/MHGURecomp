@@ -2252,8 +2252,9 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                         // Target cam selector (right edge, x > 1000, y < 100) -> Top anchor, so it stays by the minimap.
                         // (Windows centered on this layer, x 640, must stay one piece: they keep the Bottom anchor.)
                         anchor = ANCHOR_RIGHT;
-                        // The Request Log's info panel (x < 630, y < 340) is drawn here too, beside the Top-anchored menus of layer 97.
-                        vanchor = ((pos_x > 1000.0f && pos_y < 360.0f) || (pos_x < 630.0f && pos_y < 340.0f)) ? V_TOP : V_BOTTOM;
+                        // The left windows (Request Log info panel, quest card: x < 630, y < 560) are drawn here too, beside the Top-anchored menus
+                        // of layer 97. One anchor for the whole window, or it splits.
+                        vanchor = ((pos_x > 1000.0f && pos_y < 360.0f) || (pos_x < 630.0f && pos_y < 560.0f)) ? V_TOP : V_BOTTOM;
                     } else if (fabsf(pos_z - 103.0f) < 0.5f) {
                         // 103.0: In-hunt Status HUD & Item Selector
                         // Status HUD (Clock, HP bar, Stamina, gauges, palico status: y < 500) -> Left anchor
