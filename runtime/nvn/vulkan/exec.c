@@ -2101,8 +2101,8 @@ static VkDescriptorBufferInfo zero_buffer(uint64_t size) {
 // Repeats are dropped, so open a screen and read log.txt.
 static void ui_log_draw(float x, float y, float z, float sx, float sy, int anchor, int vanchor, float nx, float ny) {
     static int on = -1;
-    static uint32_t seen[16384];
-    static unsigned nseen;
+    static uint32_t *seen;  // open-addressing set of the lines already logged, grows as needed (0 = empty)
+    static unsigned cap, nseen;
     if (on < 0) { const char *e = getenv("MHGU_UI_LOG"); on = e && atoi(e); }
     if (!on) return;
     if (z > 180.0f) return;  // (3D overlays: nameplates and the like, thousands of lines)
@@ -2111,13 +2111,29 @@ static void ui_log_draw(float x, float y, float z, float sx, float sy, int ancho
     uint32_t h = 2166136261u;
     for (int i = 0; i < 5; i++) h = (h ^ (uint32_t)v[i]) * 16777619u;
     h ^= (uint32_t)(anchor + 2) << 28 ^ (uint32_t)(vanchor + 2) << 24;
-    for (unsigned i = 0; i < nseen; i++) if (seen[i] == h) return;
-    if (nseen == sizeof seen / sizeof *seen) return;  // (table full: stop, never repeat every frame)
-    seen[nseen++] = h;
+    if (!h) h = 1;
+    if (nseen * 2 >= cap) {
+        unsigned ncap = cap ? cap * 2 : 4096;
+        uint32_t *n = calloc(ncap, sizeof *n);
+        if (!n) return;
+        for (unsigned i = 0; i < cap; i++)
+            if (seen[i]) { unsigned j = seen[i] & (ncap - 1); while (n[j]) j = (j + 1) & (ncap - 1); n[j] = seen[i]; }
+        free(seen);
+        seen = n; cap = ncap;
+    }
+    unsigned j = h & (cap - 1);
+    while (seen[j]) { if (seen[j] == h) return; j = (j + 1) & (cap - 1); }
+    seen[j] = h; nseen++;
+    static double t_first = -1;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    double now = (double)ts.tv_sec + ts.tv_nsec / 1e9;
+    if (t_first < 0) t_first = now;
+    double t0 = now - t_first;
     static const char *an[] = {"left", "right", "center"}, *vn[] = {"top", "bottom", "center"};
-    LOG("[ui] z %.1f pos %.0f,%.0f scale %.0fx%.0f -> %s %s at %.0f,%.0f\n", z, x, y, sx, sy,
+    LOG("[ui] z %.1f pos %.0f,%.0f scale %.0fx%.0f -> %s %s at %.0f,%.0f  (%.0f s)\n", z, x, y, sx, sy,
         anchor >= 0 ? an[anchor] : anchor == -2 ? "fullscreen (skipped)" : "3D overlay",
-        vanchor >= 0 ? vn[vanchor] : "", nx, ny);
+        vanchor >= 0 ? vn[vanchor] : "", nx, ny, t0);
 }
 
 static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32_t gx, uint32_t gy, uint32_t gz) {
