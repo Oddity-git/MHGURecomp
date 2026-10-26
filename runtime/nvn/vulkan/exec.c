@@ -2102,7 +2102,8 @@ static void ui_log_draw(float x, float y, float z, float sx, float sy, int ancho
     if (on < 0) { const char *e = getenv("MHGU_UI_LOG"); on = e && atoi(e); }
     if (!on) return;
     if (z > 180.0f) z = 1000.0f;  // (3D overlays: their depth changes every frame, one line is enough)
-    int v[5] = {(int)lroundf(x), (int)lroundf(y), (int)lroundf(z * 4.0f), (int)lroundf(sx), (int)lroundf(sy)};
+    // (x coarse: scrolling art would fill the table)
+    int v[5] = {(int)floorf(x / 128.0f), (int)lroundf(y), (int)lroundf(z * 4.0f), (int)lroundf(sx), (int)lroundf(sy)};
     uint32_t h = 2166136261u;
     for (int i = 0; i < 5; i++) h = (h ^ (uint32_t)v[i]) * 16777619u;
     h ^= (uint32_t)(anchor + 2) << 28 ^ (uint32_t)(vanchor + 2) << 24;
@@ -2170,6 +2171,10 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                 // toward their side, on a narrower one (16:10) flattened (sy) and moved toward the top or bottom.
                 float s = g_render_aspect > 16.0f / 9.0f ? (16.0f / 9.0f) / g_render_aspect : 1.0f;
                 float sy = g_render_aspect < 16.0f / 9.0f ? g_render_aspect / (16.0f / 9.0f) : 1.0f;
+                // Layer 110 is the loading screen's scrolling backdrop: strips at y 168 / 433 / 570 that must stay one picture.
+                // The generic rule anchored each strip to a different edge and flattened it, leaving gaps between them.
+                // They keep their height (as on a stretched 16:9 canvas), so nothing moves vertically.
+                if (fabsf(pos_z - 110.0f) < 0.5f) sy = 1.0f;
                 float anchor_aspect = g_ui_anchor_aspect;  // (config.c: 16:9 .. the screen's)
                 if (anchor_aspect > g_render_aspect) anchor_aspect = g_render_aspect;
                 float a_ratio = anchor_aspect / g_render_aspect;
@@ -2241,6 +2246,7 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                     if (vanchor == V_TOP) new_pos_y = pos_y * sy;
                     else if (vanchor == V_BOTTOM) new_pos_y = 720.0f - (720.0f - pos_y) * sy;
                     else new_pos_y = 360.0f + (pos_y - 360.0f) * sy;
+                    if (sy == 1.0f) new_pos_y = pos_y;  // (kept as laid out)
                     log_anchor = anchor;
                     log_vanchor = vanchor;
                 }
