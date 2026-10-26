@@ -2202,7 +2202,7 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                     sy = 1.0f;
                     // (only the strips: the lock-on markers and other effects use layer 110 too, mid-hunt, and made
                     // everything after them center-anchored, so the HUD jumped down)
-                    if (fabsf(pos_y - 168.0f) < 1.5f || fabsf(pos_y - 433.0f) < 1.5f || fabsf(pos_y - 570.0f) < 1.5f) ui_loading_pass = true;
+                    if (fabsf(pos_y - 168.0f) < 0.3f || fabsf(pos_y - 433.0f) < 0.3f || fabsf(pos_y - 570.0f) < 0.3f) ui_loading_pass = true;
                 }
                 float anchor_aspect = g_ui_anchor_aspect;  // (config.c: 16:9 .. the screen's)
                 if (anchor_aspect > g_render_aspect) anchor_aspect = g_render_aspect;
@@ -2288,6 +2288,9 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                         else if (pos_x >= 650.0f) anchor = ANCHOR_RIGHT;
                         else anchor = ANCHOR_CENTER;
                         vanchor = pos_y < 240.0f ? V_TOP : pos_y > 480.0f ? V_BOTTOM : V_CENTER;
+                        // 99.0: the results screen's rule between its rows (y 266) is drawn here, beside rows of layer 100 that sit
+                        // Bottom: no center band, or the line cuts through the numbers.
+                        if (fabsf(pos_z - 99.0f) < 0.5f && vanchor == V_CENTER) vanchor = V_BOTTOM;
                     }
 
                     if (anchor == ANCHOR_LEFT) {
