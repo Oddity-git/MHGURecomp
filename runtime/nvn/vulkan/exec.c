@@ -2203,9 +2203,10 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                         }
                         vanchor = V_TOP;
                     } else if (fabsf(pos_z - 100.0f) < 0.5f) {
-                        // 100.0: Hunter Arts HUD, target cam selector, bottom right prompts
+                        // 100.0: Hunter Arts HUD and bottom right prompts (y > 600) -> Bottom anchor
+                        // Target cam selector (right edge, y < 100) -> Top anchor, so it stays by the minimap
                         anchor = ANCHOR_RIGHT;
-                        vanchor = V_BOTTOM;
+                        vanchor = pos_y < 360.0f ? V_TOP : V_BOTTOM;
                     } else if (fabsf(pos_z - 103.0f) < 0.5f) {
                         // 103.0: In-hunt Status HUD & Item Selector
                         // Status HUD (Clock, HP bar, Stamina, gauges, palico status: y < 500) -> Left anchor
