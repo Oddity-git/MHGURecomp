@@ -685,6 +685,7 @@ void vk_framebuffers_forget_view(VkImageView v) {
 // ================================================================== passes
 static VkFormat pass_color[8], pass_depth;
 static uint32_t pass_ncolor, pass_samples = 1, pass_w, pass_h;
+static bool ui_relax_scissor;  // the draw being set up moved a HUD piece out from under the game's scissor
 static bool ui_loading_pass;  // this pass draws the loading screen (its backdrop, layer 110, came first)
 static VkRenderPass pass_rp;
 
@@ -1193,6 +1194,7 @@ static VkRect2D scissor_rect(void) {
     pass_size(&w, &h);
     if (!w) return (VkRect2D){{0, 0}, {pass_w, pass_h}};
     int x = st.scissor[0][0], y = st.scissor[0][1], sw = st.scissor[0][2], sh = st.scissor[0][3];
+    if (ui_relax_scissor) { x = y = 0; sw = w; sh = h; }
     if (!st.rt.ncolor && g_shadow_scissor_mode == 1) { x = (int)st.viewport[0][0]; y = (int)st.viewport[0][1]; sw = (int)st.viewport[0][2]; sh = (int)st.viewport[0][3]; }
     if (!st.rt.ncolor && g_shadow_scissor_mode == 2) y = 2 * (int)st.viewport[0][1] + (int)st.viewport[0][3] - y - sh;
     if (x < 0) { sw += x; x = 0; }
@@ -2132,6 +2134,7 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
     if (size > r.size && r.size) size = r.size;
     if (size < 16) size = 16;
     if (!guest_range_ok(r.addr, size)) return zero_buffer(size);
+    if (stage == 0 && k == 3) ui_relax_scissor = false;
     if (stage == 0 && k == 3 && !st.ds[0] && pass_h == g_render_size[1] &&
         (fabsf(g_render_aspect - 16.0f / 9.0f) > 0.01f || g_hud_scale != 1.0f)) {
         if (size >= 64) {
@@ -2218,6 +2221,8 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                         } else {
                             anchor = ANCHOR_RIGHT;
                             vanchor = V_BOTTOM;
+                            // the item bar is drawn through a scissor sized for the original layout; it cut the moved bar
+                            ui_relax_scissor = true;
                         }
                     } else if (fabsf(pos_z - 105.0f) < 0.5f) {
                         // 105.0: Minimap & Target Cam
@@ -2591,6 +2596,7 @@ static void draw(CmdRec *r, bool indexed) {
     VkDescriptorSet sets[2] = {stage_set(pr->nbinds, pr->binds, pr->set_layout[0], 0, 0, pr->vi, 0, 0, 0),
                                stage_set(pr->nbinds, pr->binds, pr->set_layout[1], 1, 1, pr->fi, 0, 0, 0)};
     vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pr->layout, 0, 2, sets, 0, NULL);
+    if (ui_relax_scissor) apply_scissor(cb);  // (set while the constants above were built)
 
     // ---- indices (copied; the largest index bounds the vertex data copied below)
     uint32_t first = 0, count = (uint32_t)r->x[2], inst, base_inst, max_index = 0;
