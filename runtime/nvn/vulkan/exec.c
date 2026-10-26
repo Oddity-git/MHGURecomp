@@ -686,6 +686,7 @@ void vk_framebuffers_forget_view(VkImageView v) {
 static VkFormat pass_color[8], pass_depth;
 static uint32_t pass_ncolor, pass_samples = 1, pass_w, pass_h;
 static bool ui_relax_scissor;  // the draw being set up moved a HUD piece out from under the game's scissor
+static bool ui_menu_pass;  // this pass drew a layer 97 menu before (the windows of layer 100 then sit beside Top-anchored ones)
 static bool ui_loading_pass;  // this pass draws the loading screen (its backdrop, layer 110, came first)
 static VkRenderPass pass_rp;
 
@@ -1117,6 +1118,7 @@ static void begin_pass(void) {
     if (minw == UINT32_MAX) minw = minh = 16;
     pass_w = minw; pass_h = minh;
     ui_loading_pass = false;
+    ui_menu_pass = false;
     pass_msaa = false;
     if (ms_ok && pass_depth != VK_FORMAT_UNDEFINED && minw == g_render_size[0] && minh == g_render_size[1]) {
         bool stencil = pass_depth == VK_FORMAT_D24_UNORM_S8_UINT || pass_depth == VK_FORMAT_D32_SFLOAT_S8_UINT;
@@ -2246,15 +2248,18 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                         } else {
                             anchor = ANCHOR_LEFT;
                         }
-                        vanchor = V_TOP;
+                        // The Quest Complete banner's lower border slides in from y 739: it belongs to the bottom edge.
+                        vanchor = pos_y > 650.0f ? V_BOTTOM : V_TOP;
+                        if (fabsf(pos_z - 97.0f) < 0.5f) ui_menu_pass = true;
                     } else if (fabsf(pos_z - 100.0f) < 0.5f) {
                         // 100.0: Hunter Arts HUD and bottom right prompts (y > 600) -> Bottom anchor
                         // Target cam selector (right edge, x > 1000, y < 100) -> Top anchor, so it stays by the minimap.
                         // (Windows centered on this layer, x 640, must stay one piece: they keep the Bottom anchor.)
                         anchor = ANCHOR_RIGHT;
                         // The left windows (Request Log info panel, quest card: x < 630, y < 560) are drawn here too, beside the Top-anchored menus
-                        // of layer 97. One anchor for the whole window, or it splits.
-                        vanchor = ((pos_x > 1000.0f && pos_y < 360.0f) || (pos_x < 630.0f && pos_y < 560.0f)) ? V_TOP : V_BOTTOM;
+                        // of layer 97: one anchor for the whole window, or it splits. Without a menu in the pass (the results screen, whose
+                        // labels on the left and numbers on the right are one table) they stay Bottom like the rest of the layer.
+                        vanchor = ((pos_x > 1000.0f && pos_y < 360.0f) || (ui_menu_pass && pos_x < 630.0f && pos_y < 560.0f)) ? V_TOP : V_BOTTOM;
                     } else if (fabsf(pos_z - 103.0f) < 0.5f) {
                         // 103.0: In-hunt Status HUD & Item Selector
                         // Status HUD (Clock, HP bar, Stamina, gauges, palico status: y < 500) -> Left anchor
