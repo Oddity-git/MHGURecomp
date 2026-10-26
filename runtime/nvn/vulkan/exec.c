@@ -2101,12 +2101,14 @@ static void ui_log_draw(float x, float y, float z, float sx, float sy, int ancho
     static unsigned nseen;
     if (on < 0) { const char *e = getenv("MHGU_UI_LOG"); on = e && atoi(e); }
     if (!on) return;
+    if (z > 180.0f) z = 1000.0f;  // (3D overlays: their depth changes every frame, one line is enough)
     int v[5] = {(int)lroundf(x), (int)lroundf(y), (int)lroundf(z * 4.0f), (int)lroundf(sx), (int)lroundf(sy)};
     uint32_t h = 2166136261u;
     for (int i = 0; i < 5; i++) h = (h ^ (uint32_t)v[i]) * 16777619u;
     h ^= (uint32_t)(anchor + 2) << 28 ^ (uint32_t)(vanchor + 2) << 24;
     for (unsigned i = 0; i < nseen; i++) if (seen[i] == h) return;
-    if (nseen < sizeof seen / sizeof *seen) seen[nseen++] = h;
+    if (nseen == sizeof seen / sizeof *seen) return;  // (table full: stop, never repeat every frame)
+    seen[nseen++] = h;
     static const char *an[] = {"left", "right", "center"}, *vn[] = {"top", "bottom", "center"};
     LOG("[ui] z %.1f pos %.0f,%.0f scale %.0fx%.0f -> %s %s at %.0f,%.0f\n", z, x, y, sx, sy,
         anchor >= 0 ? an[anchor] : anchor == -2 ? "fullscreen (skipped)" : "3D overlay",
