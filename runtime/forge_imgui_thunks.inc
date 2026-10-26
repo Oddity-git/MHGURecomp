@@ -5808,19 +5808,6 @@ HLE_FUNC("igActivateItemByID", ig_igActivateItemByID) {
     IG_LEAVE(c);
 }
 
-HLE_FUNC("igAddContextHook", ig_igAddContextHook) {
-    uint32_t a0 = c->r[0];
-    uint32_t a1 = c->r[1];
-    IG_ENTER(c);
-    void *ha0 = m_in(a0, 26);
-    void *ha1 = m_in(a1, 27);
-    __auto_type r_ = igAddContextHook(ha0, ha1);
-    m_after(a0);
-    m_after(a1);
-    IG_LEAVE(c);
-    c->r[0] = (uint32_t)r_;
-}
-
 HLE_FUNC("igAddSettingsHandler", ig_igAddSettingsHandler) {
     uint32_t a0 = c->r[0];
     IG_ENTER(c);
@@ -11826,16 +11813,6 @@ HLE_FUNC("igRegisterUserTexture", ig_igRegisterUserTexture) {
     IG_LEAVE(c);
 }
 
-HLE_FUNC("igRemoveContextHook", ig_igRemoveContextHook) {
-    uint32_t a0 = c->r[0];
-    uint32_t a1 = c->r[1];
-    IG_ENTER(c);
-    void *ha0 = m_in(a0, 26);
-    igRemoveContextHook(ha0, a1);
-    m_after(a0);
-    IG_LEAVE(c);
-}
-
 HLE_FUNC("igRemoveSettingsHandler", ig_igRemoveSettingsHandler) {
     uint32_t a0 = c->r[0];
     IG_ENTER(c);
@@ -14679,7 +14656,7 @@ HLE_FUNC("igWindowRectRelToAbs", ig_igWindowRectRelToAbs) {
     c->r[0] = ret_;
 }
 
-// 1440 functions; not provided (36):
+// 1438 functions; not provided (36):
 //   ImDrawList_AddCallback (callback ImDrawCallback)
 //   ImDrawList_AddImage (argument ImTextureRef)
 //   ImDrawList_AddImageQuad (argument ImTextureRef)

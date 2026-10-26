@@ -32,7 +32,8 @@ STRUCTS, ENUMS, ENUMTYPES, LOC = SE['structs'], SE['enums'], SE['enumtypes'], SE
 
 # hand-written in runtime/forge_imgui.c (contexts, allocators, the frame itself)
 OVERRIDE = {'igCreateContext', 'igDestroyContext', 'igSetAllocatorFunctions', 'igGetAllocatorFunctions', 'igMemAlloc',
-            'igMemFree', 'igNewFrame', 'igEndFrame', 'igRender', 'igGetDrawData'}
+            'igMemFree', 'igNewFrame', 'igEndFrame', 'igRender', 'igGetDrawData', 'igAddContextHook',
+            'igRemoveContextHook'}
 # structs whose mirrors are refreshed around every call (the plugin reads and writes them at any time)
 HOT = {'ImGuiIO', 'ImGuiStyle', 'ImGuiPlatformIO'}
 # callbacks run through trampolines in runtime/forge_imgui.c (type as cimgui writes it -> trampoline)

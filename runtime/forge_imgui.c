@@ -384,6 +384,14 @@ HLE_FUNC("igCreateContext", ig_igCreateContext) {
     RET(m_out(igGetCurrentContext(), T_ImGuiContext));
 }
 HLE_FUNC("igDestroyContext", ig_igDestroyContext) {}
+// Context hooks: the plugin builds the ImGuiContextHook itself (a struct the port has no mirror for) and ImGui would
+// read it as NULL. They are left out; the overlay's frame is not the plugin's to hook anyway.
+HLE_FUNC("igAddContextHook", ig_igAddContextHook) {
+    static bool told;
+    if (!told) told = true, LOG("[forge] a plugin adds an ImGui context hook: ignored\n");
+    RET(0);
+}
+HLE_FUNC("igRemoveContextHook", ig_igRemoveContextHook) {}
 // The frame is the overlay's (a plugin's NewFrame / Render would break it)
 static void frame_call(Cpu *c, const char *what) {
     static bool told;
