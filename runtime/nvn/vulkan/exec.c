@@ -2198,7 +2198,12 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                 // Layer 110 is the loading screen's scrolling backdrop: strips at y 168 / 433 / 570 that must stay one picture.
                 // The generic rule anchored each strip to a different edge and flattened it, leaving gaps between them.
                 // They keep their height (as on a stretched 16:9 canvas), so nothing moves vertically.
-                if (fabsf(pos_z - 110.0f) < 0.5f) { sy = 1.0f; ui_loading_pass = true; }
+                if (fabsf(pos_z - 110.0f) < 0.5f) {
+                    sy = 1.0f;
+                    // (only the strips: the lock-on markers and other effects use layer 110 too, mid-hunt, and made
+                    // everything after them center-anchored, so the HUD jumped down)
+                    if (fabsf(pos_y - 168.0f) < 1.5f || fabsf(pos_y - 433.0f) < 1.5f || fabsf(pos_y - 570.0f) < 1.5f) ui_loading_pass = true;
+                }
                 float anchor_aspect = g_ui_anchor_aspect;  // (config.c: 16:9 .. the screen's)
                 if (anchor_aspect > g_render_aspect) anchor_aspect = g_render_aspect;
                 float a_ratio = anchor_aspect / g_render_aspect;
