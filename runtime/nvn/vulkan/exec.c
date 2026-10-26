@@ -2096,6 +2096,30 @@ static VkDescriptorBufferInfo zero_buffer(uint64_t size) {
 
 // Constant buffer k of a stage: 0 the driver's (storage buffer table, compute group counts), 1 the compiler constants
 // stored after the shader code, 3.. the game's bound uniform buffers. Copied into transient memory.
+// MHGU_UI_LOG=1 (debug): logs each distinct HUD draw the aspect-ratio code sees: layer depth (z), position and scale from
+// the draw's matrix, and the anchors it chose (-1: 3D overlay, left alone; -2: skipped as a full-screen quad).
+// Repeats are dropped, so open a screen and read log.txt.
+static void ui_log_draw(float x, float y, float z, float sx, float sy, int anchor, int vanchor, float nx, float ny) {
+    static int on = -1;
+    static uint32_t seen[2048];
+    static unsigned nseen;
+    if (on < 0) { const char *e = getenv("MHGU_UI_LOG"); on = e && atoi(e); }
+    if (!on) return;
+    if (z > 180.0f) z = 1000.0f;  // (3D overlays: their depth changes every frame, one line is enough)
+    // (x coarse: scrolling art would fill the table)
+    int v[5] = {(int)floorf(x / 128.0f), (int)lroundf(y), (int)lroundf(z * 4.0f), (int)lroundf(sx), (int)lroundf(sy)};
+    uint32_t h = 2166136261u;
+    for (int i = 0; i < 5; i++) h = (h ^ (uint32_t)v[i]) * 16777619u;
+    h ^= (uint32_t)(anchor + 2) << 28 ^ (uint32_t)(vanchor + 2) << 24;
+    for (unsigned i = 0; i < nseen; i++) if (seen[i] == h) return;
+    if (nseen == sizeof seen / sizeof *seen) return;  // (table full: stop, never repeat every frame)
+    seen[nseen++] = h;
+    static const char *an[] = {"left", "right", "center"}, *vn[] = {"top", "bottom", "center"};
+    LOG("[ui] z %.1f pos %.0f,%.0f scale %.0fx%.0f -> %s %s at %.0f,%.0f\n", z, x, y, sx, sy,
+        anchor >= 0 ? an[anchor] : anchor == -2 ? "fullscreen (skipped)" : "3D overlay",
+        vanchor >= 0 ? vn[vanchor] : "", nx, ny);
+}
+
 static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32_t gx, uint32_t gy, uint32_t gz) {
     if (k == 0) {
         uint32_t drv[0x800 / 4] = {0};
@@ -2147,6 +2171,7 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                                   (fabsf(m[0]) >= 1200.0f || fabsf(m[5]) >= 700.0f)) ||
                                  (fabsf(pos_x) <= 1.0f && fabsf(pos_y) <= 1.0f);
 
+            if (is_fullscreen) ui_log_draw(pos_x, pos_y, pos_z, m[0], m[5], -2, -2, pos_x, pos_y);
             if (!is_fullscreen) {
                 // The HUD keeps the 16:9 shape it is laid out in: on a wider picture its parts are narrowed (s) and moved
                 // toward their side, on a narrower one (16:10) flattened (sy) and moved toward the top or bottom.
@@ -2174,6 +2199,7 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                 s *= hud_k;
                 sy *= hud_k;
                 float new_pos_x = pos_x, new_pos_y = pos_y;
+                int log_anchor = -1, log_vanchor = -1;  // (MHGU_UI_LOG: -1 = left alone)
 
                 if (!is_3d_overlay) {
                     enum { ANCHOR_LEFT, ANCHOR_RIGHT, ANCHOR_CENTER } anchor = ANCHOR_CENTER;
@@ -2246,7 +2272,11 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                     if (vanchor == V_TOP) new_pos_y = pos_y * sy;
                     else if (vanchor == V_BOTTOM) new_pos_y = 720.0f - (720.0f - pos_y) * sy;
                     else new_pos_y = 360.0f + (pos_y - 360.0f) * sy;
+                    if (sy == 1.0f) new_pos_y = pos_y;  // (kept as laid out)
+                    log_anchor = anchor;
+                    log_vanchor = vanchor;
                 }
+                ui_log_draw(pos_x, pos_y, pos_z, m[0], m[5], log_anchor, log_vanchor, new_pos_x, new_pos_y);
 
                 m[0] *= s; m[4] *= s; m[8] *= s;
                 m[1] *= sy; m[5] *= sy; m[9] *= sy;
