@@ -562,7 +562,12 @@ static void svc_impl(Cpu *c, uint32_t imm, uint32_t pc) {
         r[0] = R_OK_;
         r[1] = 0;
         break;
-    case 0x07: LOG("ExitProcess\n"); exit(0);
+    case 0x07: {  // ExitProcess: the game's own decision to quit; where it was made is the clue when it does so early
+        uint32_t off = 0, loff = 0;
+        const char *fs = loader_symbol_at(pc, &off), *ls = loader_symbol_at(r[14], &loff);
+        LOG("ExitProcess (at %x %s+%x, lr=%x %s+%x)\n", pc, fs ? fs : "?", off, r[14], ls ? ls : "?", loff);
+        exit(0);
+    }
     case 0x08: {  // CreateThread(prio r0, entry r1, arg r2, stack_top r3, core r4) -> r1 handle
         KThread *t = thread_new(r[1], r[2], r[3], (int)r[0], (int)r[4]);
         t->handle = kernel_new_handle(&t->obj);
