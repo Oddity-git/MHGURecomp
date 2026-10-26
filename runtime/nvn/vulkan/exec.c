@@ -2205,8 +2205,10 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                         // 96.0: Dialogue & Help text box (bottom left)
                         anchor = ANCHOR_LEFT;
                         vanchor = V_BOTTOM;
-                    } else if (fabsf(pos_z - 97.0f) < 0.5f) {
+                    } else if (fabsf(pos_z - 97.0f) < 0.5f || fabsf(pos_z - 98.0f) < 0.5f) {
                         // 97.0: Menus and Submenus
+                        // 98.0: text drawn over them (the Qty. label of the quantity box): it used the generic rule, which
+                        // centered it 36 px below its top-anchored box
                         // Left window (Quest Info: x <= 430) -> Left anchor
                         // Submenu & Pause Menu (Combine, Items, Menu 1/2: x > 430) -> Right anchor
                         if (pos_x > 430.0f) {
