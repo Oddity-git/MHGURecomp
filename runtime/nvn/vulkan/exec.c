@@ -2170,9 +2170,14 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                 float anchor_right = 1280.0f - anchor_left;
 
                 bool is_3d_overlay = (pos_z > 180.0f);
-                // HUDScale (ini): the HUD and menus grow from their anchors (the screen's edges), as the 16:9 shape is kept
-                // above. Not the 3D overlays (they sit on the world) and not the loading screen (it fills the picture).
-                float hud_k = (is_3d_overlay || ui_loading_pass) ? 1.0f : g_hud_scale;
+                // HUDScale (ini): the in-hunt HUD grows from its anchors (the screen's edges), as the 16:9 shape is kept
+                // above: status bars and item bar (layer 103), minimap (105), and on layer 100 the target icon (right edge,
+                // top) and the Hunter Arts / prompts (bottom right). Menus, dialogue, banners, the 3D overlays (nameplates)
+                // and the loading screen keep the game's size.
+                bool combat_hud = fabsf(pos_z - 103.0f) < 0.5f || fabsf(pos_z - 105.0f) < 0.5f ||
+                                  (fabsf(pos_z - 100.0f) < 0.5f &&
+                                   ((pos_x > 1000.0f && pos_y < 360.0f) || (pos_x >= 700.0f && pos_y >= 600.0f)));
+                float hud_k = (combat_hud && !is_3d_overlay && !ui_loading_pass) ? g_hud_scale : 1.0f;
                 s *= hud_k;
                 sy *= hud_k;
                 float new_pos_x = pos_x, new_pos_y = pos_y;
