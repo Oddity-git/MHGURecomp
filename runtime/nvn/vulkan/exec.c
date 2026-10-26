@@ -685,6 +685,7 @@ void vk_framebuffers_forget_view(VkImageView v) {
 // ================================================================== passes
 static VkFormat pass_color[8], pass_depth;
 static uint32_t pass_ncolor, pass_samples = 1, pass_w, pass_h;
+static bool ui_loading_pass;  // this pass draws the loading screen (its backdrop, layer 110, came first)
 static VkRenderPass pass_rp;
 
 // Redundant-state filter: what draw() last set in the current command buffer (forgotten whenever something else may
@@ -1114,6 +1115,7 @@ static void begin_pass(void) {
     }
     if (minw == UINT32_MAX) minw = minh = 16;
     pass_w = minw; pass_h = minh;
+    ui_loading_pass = false;
     pass_msaa = false;
     if (ms_ok && pass_depth != VK_FORMAT_UNDEFINED && minw == g_render_size[0] && minh == g_render_size[1]) {
         bool stencil = pass_depth == VK_FORMAT_D24_UNORM_S8_UINT || pass_depth == VK_FORMAT_D32_SFLOAT_S8_UINT;
@@ -2174,7 +2176,7 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                 // Layer 110 is the loading screen's scrolling backdrop: strips at y 168 / 433 / 570 that must stay one picture.
                 // The generic rule anchored each strip to a different edge and flattened it, leaving gaps between them.
                 // They keep their height (as on a stretched 16:9 canvas), so nothing moves vertically.
-                if (fabsf(pos_z - 110.0f) < 0.5f) sy = 1.0f;
+                if (fabsf(pos_z - 110.0f) < 0.5f) { sy = 1.0f; ui_loading_pass = true; }
                 float anchor_aspect = g_ui_anchor_aspect;  // (config.c: 16:9 .. the screen's)
                 if (anchor_aspect > g_render_aspect) anchor_aspect = g_render_aspect;
                 float a_ratio = anchor_aspect / g_render_aspect;
@@ -2190,7 +2192,13 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                     // vertically one anchor per layer (or per part of one), so a window drawn in pieces stays together
                     enum { V_TOP, V_BOTTOM, V_CENTER } vanchor = V_CENTER;
 
-                    if (pos_z < 95.0f) {
+                    if (ui_loading_pass && pos_z >= 94.0f && pos_z < 109.5f) {
+                        // Loading screen: the quest panel's headers (layer 100), its text (101) and the title (105) are one
+                        // picture. The generic rules moved them by different amounts (bottom, center, top) and the
+                        // "Summary" header landed on the text. All of it scales about the center instead.
+                        anchor = ANCHOR_CENTER;
+                        vanchor = V_CENTER;
+                    } else if (pos_z < 95.0f) {
                         // 94.0: Central notifications & banners ("Time limit: 50 min.")
                         anchor = ANCHOR_CENTER;
                     } else if (fabsf(pos_z - 96.0f) < 0.5f) {
