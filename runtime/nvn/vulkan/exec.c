@@ -2137,7 +2137,8 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
     if (size < 16) size = 16;
     if (!guest_range_ok(r.addr, size)) return zero_buffer(size);
     if (stage == 0 && k == 3) ui_relax_scissor = false;
-    if (stage == 0 && k == 3 && !st.ds[0] && pass_h == g_render_size[1] && fabsf(g_render_aspect - 16.0f / 9.0f) > 0.01f) {
+    if (stage == 0 && k == 3 && !st.ds[0] && pass_h == g_render_size[1] &&
+        (fabsf(g_render_aspect - 16.0f / 9.0f) > 0.01f || g_hud_scale != 1.0f)) {
         if (size >= 64) {
             float m[16];
             memcpy(m, G2H((uint32_t)r.addr), 64);
@@ -2169,6 +2170,11 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                 float anchor_right = 1280.0f - anchor_left;
 
                 bool is_3d_overlay = (pos_z > 180.0f);
+                // HUDScale (ini): the HUD and menus grow from their anchors (the screen's edges), as the 16:9 shape is kept
+                // above. Not the 3D overlays (they sit on the world) and not the loading screen (it fills the picture).
+                float hud_k = (is_3d_overlay || ui_loading_pass) ? 1.0f : g_hud_scale;
+                s *= hud_k;
+                sy *= hud_k;
                 float new_pos_x = pos_x, new_pos_y = pos_y;
 
                 if (!is_3d_overlay) {

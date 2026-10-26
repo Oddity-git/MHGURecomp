@@ -36,6 +36,7 @@ typedef struct {
     float fov;                // 3D camera field of view factor (1: the game's)
     int ui_anchor;            // where the HUD goes on a picture wider than 16:9: UI_*
     int background_input;     // the controller keeps working while the window is in the background (runtime/ui.c)
+    float hud_scale;          // size of the HUD and menus (1: the game's), about their screen edges (nvn/vulkan/exec.c)
 } Config;
 enum { UI_CENTER = 1, UI_21_9, UI_32_9, UI_EDGES };  // the middle 16:9, 21:9, 32:9, the picture's sides
 
@@ -45,6 +46,7 @@ extern float g_render_aspect;      // the picture's shape, 16:10 or wider: the 3
 extern float g_fov_scale;          // 3D camera field of view factor (tools/gen.py PATCHES)
 extern uint32_t g_ui_size[2];      // the game's 2D canvas size (tools/gen.py PATCHES: 0xdbcd48, 0xdbcd54)
 extern float g_ui_anchor_aspect;   // the HUD's width / height, 16:9 .. g_render_aspect (nvn/vulkan/exec.c)
+extern float g_hud_scale;          // size of the HUD and menus, 0.5 .. 2 (nvn/vulkan/exec.c)
 float camera_fovy(float fovy, float aspect);  // a 3D camera's vertical field of view for its aspect (gen.py PATCHES)
 
 void config_load(void);  // before the window and the guest start

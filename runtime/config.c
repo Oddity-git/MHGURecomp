@@ -16,12 +16,13 @@
 #include "config.h"
 #include "rt.h"
 
-Config g_config = {DISPLAY_BORDERLESS, 1920, 1080, 0, 0, 60, 1, 1, 1, FACE_POSITION, 39500, "", 1, 1, 1, {{1, 1, 1, 1}, 2}, 1.0f, 0.0f, 1.0f, UI_CENTER, 1};
+Config g_config = {DISPLAY_BORDERLESS, 1920, 1080, 0, 0, 60, 1, 1, 1, FACE_POSITION, 39500, "", 1, 1, 1, {{1, 1, 1, 1}, 2}, 1.0f, 0.0f, 1.0f, UI_CENTER, 1, 1.0f};
 uint32_t g_render_size[2] = {1920, 1080};
 float g_render_aspect = 16.0f / 9.0f;
 float g_fov_scale = 1.0f;
 uint32_t g_ui_size[2] = {1280, 720};
 float g_ui_anchor_aspect = 16.0f / 9.0f;
+float g_hud_scale = 1.0f;
 
 static const char DEFAULT_INI[] =
     "; MHGU Recomp settings. Delete this file to get the defaults back: it is written again at the next start.\n"
@@ -51,6 +52,10 @@ static const char DEFAULT_INI[] =
     "; Where the HUD goes on a picture wider than 16:9: Center (in the middle 16:9, as the game lays it out) or Edges\n"
     "; (out to the sides of the screen). 21:9 or 32:9 spread it that wide, at most to the sides.\n"
     "UIAnchor = Center\n"
+    "\n"
+    "; Size of the HUD and the menus: 1.0 is the game's, above 1.0 (1.2) makes them bigger, below 1.0 smaller. They grow\n"
+    "; from the screen's edges (the status bars from the top left, the minimap from the top right, and so on). 0.5 to 2.\n"
+    "HUDScale = 1.0\n"
     "\n"
     "[Anti-aliasing]\n"
     "; MSAA: Off, 2x, 4x or 8x. Smooths the edges of 3D geometry and of some cut-out leaves and fences; each step\n"
@@ -237,6 +242,9 @@ static void set_key(const char *key, char *val, int line) {
         if ((ok = f >= 0.5f && f <= 2.0f)) g_config.fov = f;
     } else if (!strcmp(k, "uianchor")) {
         ok = parse_anchor(v, &g_config.ui_anchor);
+    } else if (!strcmp(k, "hudscale")) {
+        float f = strtof(v, NULL);
+        if ((ok = f >= 0.5f && f <= 2.0f)) g_config.hud_scale = f;
     } else if (!strcmp(k, "msaa")) {
         if (!strcmp(v, "off") || !strcmp(v, "none") || !strcmp(v, "0") || !strcmp(v, "1") || !strcmp(v, "1x"))
             g_config.msaa = 1;
@@ -401,6 +409,7 @@ void config_load(void) {
     if ((e = getenv("MHGU_ASPECT"))) parse_aspect(e, &g_config.aspect_ratio);
     if ((e = getenv("MHGU_FOV")) && strtof(e, NULL) >= 0.5f && strtof(e, NULL) <= 2.0f) g_config.fov = strtof(e, NULL);
     if ((e = getenv("MHGU_UI_ANCHOR"))) parse_anchor(e, &g_config.ui_anchor);
+    if ((e = getenv("MHGU_HUD_SCALE")) && strtof(e, NULL) >= 0.5f && strtof(e, NULL) <= 2.0f) g_config.hud_scale = strtof(e, NULL);
     e = getenv("MHGU_RENDER");
     if (e && parse_size(e, &w, &h)) render_auto = false, g_config.render_w = w, g_config.render_h = h;
 
@@ -429,6 +438,7 @@ void config_load(void) {
     g_render_size[1] = (uint32_t)h;
     g_render_aspect = aspect;
     g_fov_scale = g_config.fov;
+    g_hud_scale = g_config.hud_scale;
 
     // The HUD's width: 16:9 (Center), 21:9, 32:9 or the picture's (Edges), at most the picture's; the game's 2D canvas
     // gets that width (gen.py PATCHES), exec.c places the HUD's parts in it.
