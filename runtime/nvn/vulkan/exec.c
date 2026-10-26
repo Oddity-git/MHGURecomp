@@ -2101,11 +2101,11 @@ static VkDescriptorBufferInfo zero_buffer(uint64_t size) {
 // Repeats are dropped, so open a screen and read log.txt.
 static void ui_log_draw(float x, float y, float z, float sx, float sy, int anchor, int vanchor, float nx, float ny) {
     static int on = -1;
-    static uint32_t seen[2048];
+    static uint32_t seen[16384];
     static unsigned nseen;
     if (on < 0) { const char *e = getenv("MHGU_UI_LOG"); on = e && atoi(e); }
     if (!on) return;
-    if (z > 180.0f) z = 1000.0f;  // (3D overlays: their depth changes every frame, one line is enough)
+    if (z > 180.0f) return;  // (3D overlays: nameplates and the like, thousands of lines)
     // (x coarse: scrolling art would fill the table)
     int v[5] = {(int)floorf(x / 128.0f), (int)lroundf(y), (int)lroundf(z * 4.0f), (int)lroundf(sx), (int)lroundf(sy)};
     uint32_t h = 2166136261u;
