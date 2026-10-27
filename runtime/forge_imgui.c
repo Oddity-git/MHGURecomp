@@ -557,6 +557,17 @@ HLE_FUNC("ImDrawList_AddImage", ig_ImDrawList_AddImage) {
     uint32_t a0 = c->r[0], col = STK(10);
     IG_ENTER(c);
     void *dl = m_in(a0, T_ImDrawList);
+    static int nd;
+    if (nd++ < 12) {  // DIAG
+        ImTextureData *td = c->r[2] ? m_in(c->r[2], T_ImTextureData) : NULL;
+        TexPixels *e = td ? tex_find(td) : NULL;
+        unsigned hnz = 0, gnz = 0;
+        for (int i = 0; td && td->Pixels && i < 131072; i++) hnz += td->Pixels[i] != 0;
+        for (uint32_t i = 0; e && e->g && i < 131072 && i < e->size; i++) gnz += LD8(e->g + i) != 0;
+        LOG("[diag] AddImage min=%.1f,%.1f max=%.1f,%.1f uv=%.3f,%.3f-%.3f,%.3f col=%08x pixels=%p nz(host)=%u nz(guest)=%u\n",
+            ig_f(STK(2)), ig_f(STK(3)), ig_f(STK(4)), ig_f(STK(5)), ig_f(STK(6)), ig_f(STK(7)), ig_f(STK(8)), ig_f(STK(9)),
+            col, td ? (void *)td->Pixels : NULL, hnz, gnz);
+    }
     ImDrawList_AddImage(dl, tex_ref(c->r[2], STK(0), STK(1)), (ImVec2_c){ig_f(STK(2)), ig_f(STK(3))},
                         (ImVec2_c){ig_f(STK(4)), ig_f(STK(5))}, (ImVec2_c){ig_f(STK(6)), ig_f(STK(7))},
                         (ImVec2_c){ig_f(STK(8)), ig_f(STK(9))}, col);
