@@ -536,6 +536,38 @@ HLE_FUNC("ImTextureData_destroy", ig_ImTextureData_destroy) {
     IG_LEAVE(c);
 }
 
+// An ImTextureRef (ImTextureData *, ImTextureID = ImU64) is 16 bytes with the 8-byte alignment of its ID: passed by
+// value it takes r2:r3 (the pointer and the padding), then the ID on the stack, before the other arguments; a result
+// goes through the pointer in r0. The ImTextureData is the plugin's own object, so its host object stands in for it.
+static ImTextureRef_c tex_ref(uint32_t g, uint32_t id_lo, uint32_t id_hi) {
+    return (ImTextureRef_c){g ? m_in(g, T_ImTextureData) : NULL, (uint64_t)id_hi << 32 | id_lo};
+}
+HLE_FUNC("ImTextureData_GetTexRef", ig_ImTextureData_GetTexRef) {
+    uint32_t ret = c->r[0], tex = c->r[1];
+    ST32(ret, tex), ST32(ret + 4, 0), ST32(ret + 8, 0), ST32(ret + 12, 0);  // (_TexID: invalid, as ImGui's)
+    c->r[0] = ret;
+}
+HLE_FUNC("ImDrawList_AddImage", ig_ImDrawList_AddImage) {
+    uint32_t a0 = c->r[0], col = STK(10);
+    IG_ENTER(c);
+    void *dl = m_in(a0, T_ImDrawList);
+    ImDrawList_AddImage(dl, tex_ref(c->r[2], STK(0), STK(1)), (ImVec2_c){ig_f(STK(2)), ig_f(STK(3))},
+                        (ImVec2_c){ig_f(STK(4)), ig_f(STK(5))}, (ImVec2_c){ig_f(STK(6)), ig_f(STK(7))},
+                        (ImVec2_c){ig_f(STK(8)), ig_f(STK(9))}, col);
+    m_after(a0);
+    IG_LEAVE(c);
+}
+HLE_FUNC("ImDrawList_AddImageQuad", ig_ImDrawList_AddImageQuad) {
+    uint32_t a0 = c->r[0], col = STK(18);
+    IG_ENTER(c);
+    void *dl = m_in(a0, T_ImDrawList);
+    ImVec2_c v[8];
+    for (int i = 0; i < 8; i++) v[i] = (ImVec2_c){ig_f(STK(2 + 2 * i)), ig_f(STK(3 + 2 * i))};
+    ImDrawList_AddImageQuad(dl, tex_ref(c->r[2], STK(0), STK(1)), v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], col);
+    m_after(a0);
+    IG_LEAVE(c);
+}
+
 // Context hooks: the plugin's ImGuiContextHook is its own struct (HookId, Type, Owner, Callback, UserData: 5 words),
 // kept in a copy of ours in guest memory (the plugin's may be on its stack). ImGui gets a hook whose callback runs the
 // plugin's on the thread building the frame (overlay_frame: the game's), with that copy, as ImGui would pass its own.

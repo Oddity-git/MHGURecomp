@@ -14617,10 +14617,8 @@ HLE_FUNC("igWindowRectRelToAbs", ig_igWindowRectRelToAbs) {
     c->r[0] = ret_;
 }
 
-// 1434 functions; not provided (32):
+// 1434 functions; not provided (29):
 //   ImDrawList_AddCallback (callback ImDrawCallback)
-//   ImDrawList_AddImage (argument ImTextureRef)
-//   ImDrawList_AddImageQuad (argument ImTextureRef)
 //   ImDrawList_AddImageRounded (argument ImTextureRef)
 //   ImDrawList_PushTexture (argument ImTextureRef)
 //   ImDrawList__SetTexture (argument ImTextureRef)
@@ -14629,7 +14627,6 @@ HLE_FUNC("igWindowRectRelToAbs", ig_igWindowRectRelToAbs) {
 //   ImGuiSelectionBasicStorage_GetNextSelectedItem (argument void**)
 //   ImGuiStorage_GetVoidPtrRef (returns void**)
 //   ImGuiTextRange_split (argument ImVector_ImGuiTextRange*)
-//   ImTextureData_GetTexRef (returns ImTextureRef)
 //   igAddDrawListToDrawDataEx (argument ImVector_ImDrawListPtr*)
 //   igDebugNodeWindowsList (argument ImVector_ImGuiWindowPtr*)
 //   igDebugNodeWindowsListByBeginStackParent (argument ImGuiWindow**)
