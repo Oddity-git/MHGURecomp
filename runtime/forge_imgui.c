@@ -540,7 +540,13 @@ HLE_FUNC("ImTextureData_destroy", ig_ImTextureData_destroy) {
 // value it takes r2:r3 (the pointer and the padding), then the ID on the stack, before the other arguments; a result
 // goes through the pointer in r0. The ImTextureData is the plugin's own object, so its host object stands in for it.
 static ImTextureRef_c tex_ref(uint32_t g, uint32_t id_lo, uint32_t id_hi) {
-    return (ImTextureRef_c){g ? m_in(g, T_ImTextureData) : NULL, (uint64_t)id_hi << 32 | id_lo};
+    ImTextureRef_c r = {g ? m_in(g, T_ImTextureData) : NULL, (uint64_t)id_hi << 32 | id_lo};
+    static int n;
+    if (n++ < 8)  // DIAG
+        LOG("[diag] image: tex g=%08x id=%08x:%08x host=%p status=%d texid=%llx %dx%d\n", g, id_hi, id_lo, (void *)r._TexData,
+            r._TexData ? (int)r._TexData->Status : -1, r._TexData ? (unsigned long long)r._TexData->TexID : 0ull,
+            r._TexData ? r._TexData->Width : 0, r._TexData ? r._TexData->Height : 0);
+    return r;
 }
 HLE_FUNC("ImTextureData_GetTexRef", ig_ImTextureData_GetTexRef) {
     uint32_t ret = c->r[0], tex = c->r[1];
