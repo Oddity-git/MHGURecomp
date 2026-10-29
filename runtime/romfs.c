@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "arcmerge.h"
 #include "rt.h"
 
 #define EMPTY 0xFFFFFFFFu
@@ -20,6 +21,7 @@
 typedef struct Dir Dir;
 typedef struct {
     char *name, *path;  // path: the host file
+    char *orig;         // the game's own file, once a mod has replaced it
     uint64_t size, data_off;
     uint32_t off;
     Dir *parent;
@@ -87,9 +89,24 @@ static int merge(Dir *dst, Dir *src) {
         int k = 0;
         while (k < dst->nfiles && strcasecmp(dst->files[k]->name, f->name)) k++;
         if (k < dst->nfiles) {
-            free(dst->files[k]->path);
-            dst->files[k]->path = strdup(f->path);
-            dst->files[k]->size = f->size;
+            File *d = dst->files[k];
+            size_t nl = strlen(f->name);
+            char merged[1200];
+            if (d->orig && nl > 4 && !strcasecmp(f->name + nl - 4, ".arc") &&
+                arc_merge(d->orig, d->path, f->path, merged, sizeof merged)) {  // (two mods' archives: both's changes)
+                struct stat st;
+                if (!stat(merged, &st)) {
+                    free(d->path);
+                    d->path = strdup(merged);
+                    d->size = (uint64_t)st.st_size;
+                    changed++;
+                    continue;
+                }
+            }
+            if (!d->orig) d->orig = strdup(d->path);
+            free(d->path);
+            d->path = strdup(f->path);
+            d->size = f->size;
         } else {
             File *n = calloc(1, sizeof *n);
             n->name = strdup(f->name), n->path = strdup(f->path), n->size = f->size;
