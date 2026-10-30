@@ -76,7 +76,8 @@ EXE      := $(B)/mhgurecomp
 OSFLAGS  :=
 GENFLAGS += -fPIC
 FFMPEG_CONF += --enable-pic
-LDFLAGS  := -fuse-ld=lld -rdynamic -lSDL3 $(AV_LIBS) -lvulkan -lshaderc_shared -lpthread -ldl -lm
+# (run path $ORIGIN: the libraries bundled beside the program come first, see bundle)
+LDFLAGS  := -fuse-ld=lld -rdynamic -Wl,-rpath,'$$ORIGIN' -lSDL3 $(AV_LIBS) -lvulkan -lshaderc_shared -lpthread -ldl -lm
 # The executable starts with glibc GLIBC_MAX or later (SteamOS, Debian 13): calls to the functions newer glibc versions
 # gave a new symbol version go to the old one (runtime/platform/linux.c), and the link checks that nothing newer is left.
 GLIBC_MAX  := 2.41
@@ -86,7 +87,7 @@ GAMELIB  := $(B)/mhgugame.so
 GAMELIB_LDFLAGS := -shared -fuse-ld=lld
 UPDATER  := $(B)/mhgurecomp-updater
 # (libcurl: opened at run time, updater/http.c)
-UPD_LDFLAGS := -fuse-ld=lld -lSDL3 -lz -ldl
+UPD_LDFLAGS := -fuse-ld=lld -Wl,-rpath,'$$ORIGIN' -lSDL3 -lz -ldl
 endif
 
 # GAMELIB_ID: what the game code library is compiled against. A library with another id is refused at startup.
@@ -156,7 +157,7 @@ else
 RT_CXX   := $(O)/rt/nvn/vulkan/vma.o $(FSR_OBJ)
 endif
 
-all: $(EXE) $(if $(GEN_SRC),$(GAMELIB)) $(UPDATER) $(if $(filter windows,$(PLATFORM)),bundle) data licenses pipelist
+all: $(EXE) $(if $(GEN_SRC),$(GAMELIB)) $(UPDATER) bundle data licenses pipelist
 
 # Host-only INI/settings regression test: no game dump or generated code required.
 .PHONY: test-settings
@@ -299,7 +300,8 @@ $(GAMELIB): $(GEN_OBJ) | $(EXE)
 PY := $(firstword $(wildcard tools/venv/Scripts/python.exe) $(wildcard tools/venv/bin/python) python3)
 
 # The build folder is the game folder: mhgurecomp.exe starts from it on its own (runtime/main.c), with
-# - bundle (Windows): the MSYS2 DLLs it needs beside it (tools/bundle_dlls.py; not the GPU driver's vulkan-1.dll)
+# - bundle (Windows): the MSYS2 DLLs it needs beside it (tools/bundle_dlls.py; not the GPU driver's vulkan-1.dll);
+#   (Linux): the libraries in BUNDLE_LIBS, which many distributions lack or have too old (tools/bundle_libs.py)
 # - data: the game files from $(GAME) in $(B)/data/exefs and $(B)/data/romfs, once (hard links where the file system
 #   allows them - no second copy on disk, and deleting them leaves $(GAME) alone - else copies).
 # Nothing else: a player copies it as a whole into their game folder (or over it: their settings, caches, mods/ and
@@ -307,9 +309,16 @@ PY := $(firstword $(wildcard tools/venv/Scripts/python.exe) $(wildcard tools/ven
 # (--with: MSYS2 packages linked into the executable or into a bundled DLL, whose licenses go along too: the static
 # GCC runtime, VulkanMemoryAllocator, and glslang / SPIRV-Tools inside shaderc's DLL)
 LICENSE_PKGS := libstdc++ libgcc libwinpthread vulkan-memory-allocator glslang spirv-tools zlib
+ifeq ($(PLATFORM),windows)
 bundle: $(EXE) $(if $(GEN_SRC),$(GAMELIB)) $(UPDATER)
 	@$(PY) tools/bundle_dlls.py "$$(cygpath -m "$$(dirname "$$(command -v $(CC))")")" $(B) $^ \
 	    --licenses $(B)/licenses --with $(LICENSE_PKGS)
+else
+# SDL3: not packaged by Ubuntu 24.04 (Mint, Zorin, Pop!_OS...), and Debian 13 / SteamOS have 3.2 (no SDL_SavePNG)
+BUNDLE_LIBS := libSDL3.so.0
+bundle: $(EXE) $(UPDATER)
+	@$(PY) tools/bundle_libs.py $(B) $(GLIBC_MAX) $^ --libs $(BUNDLE_LIBS) --licenses $(B)/licenses
+endif
 
 data: $(B)/data/.complete
 $(B)/data/.complete:
@@ -336,7 +345,7 @@ test-lift:
 runtime-objs: $(RT_OBJ)
 
 clean:  # (keeps $(B)/data, and the settings, caches and saves wherever the game ran)
-	rm -rf $(O) $(B)/*.dll $(B)/*.so $(EXE) $(UPDATER) $(B)/vkprobe.exe
+	rm -rf $(O) $(B)/*.dll $(B)/*.so $(B)/*.so.* $(EXE) $(UPDATER) $(B)/vkprobe.exe
 
 # make dist VERSION=0.10.4: the release archive of the build folder, for GitHub (tools/dist.py): in $(DIST)/,
 # Windows-MHGURecomp.<version>.zip or ArchLinux-MHGURecomp.<version>.tar.gz (permissions kept), holding the programs,

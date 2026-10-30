@@ -376,7 +376,8 @@ cd build && ./mhgurecomp
 ```
 
 `build/` becomes the game folder exactly as on Windows: `mhgurecomp`, `mhgugame.so` with the recompiled game
-code and `data/` as hard links to your game files, nothing else; the ini, caches and `mods/` are written beside
+code, `libSDL3.so.0` (a copy of the system's SDL3, used first: players don't need SDL3 installed) and `data/` as
+hard links to your game files, nothing else; the ini, caches and `mods/` are written beside
 them when it runs (`MHGU_HOME=<folder>` puts those there instead). Saves go to
 `$XDG_DATA_HOME/MHGURecomp/save`, default `~/.local/share/MHGURecomp/save` — the folder the Windows build
 keeps them in under `%APPDATA%`, same layout, so moving a save across is copying `save_0`.
