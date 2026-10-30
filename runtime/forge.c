@@ -28,6 +28,7 @@
 
 #include "config.h"
 #include "forge.h"
+#include "kernel.h"
 #include "hle.h"
 #include "hle/input.h"
 #include "interp.h"
@@ -507,7 +508,7 @@ static bool hook_install(uint32_t target, uint32_t detour, bool want_orig, uint3
 // and returns (it pushes two words: not for functions with arguments on the stack), inside a function (hook_inside)
 // jumps on to it (the jump in is not a call). An entry and an inside hook on one function is what Damage Numbers does.
 static void forge_map_regions(void);
-#define MAX_TEST_HOOKS 4
+#define MAX_TEST_HOOKS 8
 static struct { uint32_t target; int calls; } tests[MAX_TEST_HOOKS];
 static int ntests;
 
@@ -515,7 +516,11 @@ static void test_count(Cpu *c) {
     int i = (int)c->r[0];
     if (i < 0 || i >= ntests) return;
     int n = ++tests[i].calls;
-    if (n <= 5 || !(n % 1000)) LOG("[forge] test hook %08x: call %d\n", tests[i].target, n);
+    if (n <= 5) {  // (and where from: the stub pushed r0-r3, r12 and lr, the hooked function's return address)
+        char line[400];
+        kernel_stack_callers(c->r[13], line, sizeof line);
+        LOG("[forge] test hook %08x: call %d, returns to %x, callers:%s\n", tests[i].target, n, LD32(c->r[13] + 20), line);
+    } else if (!(n % 1000)) LOG("[forge] test hook %08x: call %d\n", tests[i].target, n);
 }
 
 void forge_test_hook(uint32_t target) {
