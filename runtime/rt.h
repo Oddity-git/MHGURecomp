@@ -121,6 +121,9 @@ union SDL_Event;
 void host_input_event(const union SDL_Event *e);
 void host_input_update(void);            // recompute the controller state the game reads (each loop pass)
 bool host_input_press(const char *button, unsigned frames);  // scripted press from the next frame (UI thread)
+// (experiment, MHGU_HID_KEYBOARD=1) the physical keyboard as the Switch's USB keyboard: the keys held as HID usage
+// bits (SDL scancodes are the USB usage IDs) and nn::hid's modifier bits. False when the experiment is off.
+bool host_keyboard_state(uint8_t keys[32], uint32_t *modifiers);
 void quickhunt_poll(void);               // (debug) MHGU_QUICKHUNT's presses (runtime/hle/quickhunt.c; UI thread)
 
 // ---- helpers

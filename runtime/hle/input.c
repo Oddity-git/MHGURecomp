@@ -89,10 +89,23 @@ HLE_FUNC("_ZN2nn3hid27BindNpadStyleSetUpdateEventERKjPNS_2os15SystemEventTypeENS
 
 HLE_FUNC("_ZN2nn3hid14InitializeNpadEv", hid_init_npad) { (void)c; }
 HLE_FUNC("_ZN2nn3hid18InitializeKeyboardEv", hid_init_keyboard) { (void)c; }
+// KeyboardState: int64 sampling number, u32 modifiers (+8), u32 attributes (+0xc, bit 0: connected), 256 key bits by
+// USB HID usage (+0x10). Empty (no keyboard) unless MHGU_HID_KEYBOARD=1 (an experiment: host_keyboard_state).
 HLE_FUNC("_ZN2nn3hid16GetKeyboardStateEPNS0_13KeyboardStateE", hid_keyboard_state) {
     int64_t n = __atomic_add_fetch(&sampling, 1, __ATOMIC_RELAXED);
-    memset(ARGP(0), 0, 0x38);
-    memcpy(ARGP(0), &n, 8);
+    uint8_t *s = ARGP(0), keys[32];
+    uint32_t mods = 0, connected = 1;
+    memset(s, 0, 0x38);
+    memcpy(s, &n, 8);
+    if (!host_keyboard_state(keys, &mods)) return;
+    memcpy(s + 8, &mods, 4);
+    memcpy(s + 0xc, &connected, 4);
+    memcpy(s + 0x10, keys, 32);
+    static uint8_t last[32];  // (log each key the game is given, once per press, to see what it does with them)
+    for (int i = 0; i < 256; i++)
+        if ((keys[i >> 3] ^ last[i >> 3]) & keys[i >> 3] & (1u << (i & 7)))
+            LOG("[hid] keyboard: usage 0x%02x down (frame %llu)\n", i, (unsigned long long)g_present_count);
+    memcpy(last, keys, 32);
 }
 HLE_FUNC("_ZN2nn3hid22SetSupportedNpadIdTypeEPKjj", hid_set_ids) { (void)c; }
 HLE_FUNC("_ZN2nn3hid24SetSupportedNpadStyleSetENS_4util10BitFlagSetILi32ENS0_12NpadStyleTagEEE", hid_set_styles) { (void)c; }

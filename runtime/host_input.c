@@ -593,6 +593,25 @@ static void rumble_update(void) {
     sent = v, sent_ns = now;
 }
 
+bool host_keyboard_state(uint8_t out[32], uint32_t *modifiers) {
+    static int on = -1;
+    if (on < 0) {
+        const char *e = getenv("MHGU_HID_KEYBOARD");
+        on = e && atoi(e) > 0;
+        if (on) LOG("[input] MHGU_HID_KEYBOARD: the keyboard is also the game's USB keyboard (experiment)\n");
+    }
+    if (!on) return false;
+    memset(out, 0, 32);
+    for (int sc = 4; sc < 256 && sc < SDL_SCANCODE_COUNT; sc++)  // (0-3: no key / errors)
+        if (keys[sc]) out[sc >> 3] |= (uint8_t)(1u << (sc & 7));
+    SDL_Keymod m = SDL_GetModState();
+    // nn::hid::KeyboardModifier: Control 0, Shift 1, LeftAlt 2, RightAlt 3, Gui 4, CapsLock 8, ScrollLock 9, NumLock 10
+    *modifiers = (m & SDL_KMOD_CTRL ? 1u << 0 : 0) | (m & SDL_KMOD_SHIFT ? 1u << 1 : 0) | (m & SDL_KMOD_LALT ? 1u << 2 : 0) |
+                 (m & SDL_KMOD_RALT ? 1u << 3 : 0) | (m & SDL_KMOD_GUI ? 1u << 4 : 0) | (m & SDL_KMOD_CAPS ? 1u << 8 : 0) |
+                 (m & SDL_KMOD_SCROLL ? 1u << 9 : 0) | (m & SDL_KMOD_NUM ? 1u << 10 : 0);
+    return true;
+}
+
 void host_input_update(void) {
     if (nscript < 0) script_parse();
     rumble_update();
