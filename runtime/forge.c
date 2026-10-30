@@ -519,7 +519,15 @@ static void test_count(Cpu *c) {
     if (n <= 5) {  // (and where from: the stub pushed r0-r3, r12 and lr, the hooked function's return address)
         char line[400];
         kernel_stack_callers(c->r[13], line, sizeof line);
-        LOG("[forge] test hook %08x: call %d, returns to %x, callers:%s\n", tests[i].target, n, LD32(c->r[13] + 20), line);
+        uint32_t sp = c->r[13], a[4] = {LD32(sp), LD32(sp + 4), LD32(sp + 8), LD32(sp + 12)};  // (r0-r3 as called)
+        LOG("[forge] test hook %08x: call %d, args %x %x %x %x, returns to %x, callers:%s\n", tests[i].target, n, a[0],
+            a[1], a[2], a[3], LD32(sp + 20), line);
+        for (int k = 0; k < 2; k++) {  // the first two arguments' memory, when they point at some (an object, a text)
+            if (!kernel_mapped(a[k], 0xc0)) continue;
+            char hex[0xc0 * 3 + 1];
+            for (int b = 0; b < 0xc0; b++) snprintf(hex + 3 * b, 4, " %02x", LD8(a[k] + (uint32_t)b));
+            LOG("[forge]   arg %d -> %x:%s\n", k, a[k], hex);
+        }
     } else if (!(n % 1000)) LOG("[forge] test hook %08x: call %d\n", tests[i].target, n);
 }
 
