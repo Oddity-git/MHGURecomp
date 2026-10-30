@@ -11,6 +11,14 @@
 
 #include "../hle.h"
 #include "../textinput.h"
+#include "../kernel.h"
+
+// (experiment, MHGU_HID_KEYBOARD=1) where in the game a keyboard call comes from: to find what opens the hub chat
+static void trace(const char *tag, const Cpu *c) {
+    static int on = -1;
+    if (on < 0) on = getenv("MHGU_HID_KEYBOARD") && atoi(getenv("MHGU_HID_KEYBOARD")) > 0;
+    if (on) kernel_log_guest_stack(tag, c);
+}
 
 // nn::swkbd::ShowKeyboard(String *out, const ShowKeyboardArg &) -> Result. String = {void *ptr; size_t size}.
 HLE_FUNC("_ZN2nn5swkbd12ShowKeyboardEPNS0_6StringERKNS0_15ShowKeyboardArgE", swkbd_show) {
@@ -38,7 +46,11 @@ static int words_pending;
 HLE_FUNC("_ZN2nn5swkbd14InlineKeyboardC1Ev", ik_ctor) { (void)c; }
 HLE_FUNC("_ZN2nn5swkbd14InlineKeyboardD1Ev", ik_dtor) { (void)c; }
 HLE_FUNC("_ZN2nn5swkbd14InlineKeyboard25GetRequiredWorkBufferSizeEv", ik_work_size) { RET(0x40000); }
-HLE_FUNC("_ZN2nn5swkbd14InlineKeyboard10InitializeEPv", ik_initialize) { init_pending = 1; RET(1); }
+HLE_FUNC("_ZN2nn5swkbd14InlineKeyboard10InitializeEPv", ik_initialize) {
+    trace("[swkbd] Initialize", c);
+    init_pending = 1;
+    RET(1);
+}
 HLE_FUNC("_ZN2nn5swkbd14InlineKeyboard8FinalizeEv", ik_finalize) { textinput_end(); }
 HLE_FUNC("_ZN2nn5swkbd14InlineKeyboard29SetFinishedInitializeCallbackEPFvvE", ik_cb_init) { cb_init_done = ARG(1); }
 HLE_FUNC("_ZN2nn5swkbd14InlineKeyboard24SetDecidedCancelCallbackEPFvvE", ik_cb_cancel) { cb_cancel = ARG(1); }
@@ -115,6 +127,7 @@ HLE_FUNC("_ZN2nn5swkbd14InlineKeyboard6AppearERKNS0_9AppearArgE", ik_appear) {
     char hex[3 * 0x30 + 1];
     for (int i = 0; i < 0x30; i++) snprintf(hex + 3 * i, 4, " %02x", LD8(a + (uint32_t)i));
     LOG("[swkbd] inline keyboard shown (frame %llu), AppearArg%s\n", (unsigned long long)g_present_count, hex);
+    trace("[swkbd] Appear", c);
     ik_state = 3;
     ik_auto = getenv("MHGU_NAME") || getenv("MHGU_INLINE_CANCEL") ? 1 : 0;
     if (!ik_auto) textinput_begin(ik_initial, max);
