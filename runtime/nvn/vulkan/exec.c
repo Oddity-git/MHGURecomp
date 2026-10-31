@@ -21,6 +21,7 @@
 
 #include "../../kernel.h"
 #include "fsr.h"
+#include "post.h"
 #include "shaders.h"
 #include "vk.h"
 
@@ -3342,11 +3343,12 @@ static void draw(CmdRec *r, bool indexed) {
     VkPrimitiveTopology topo;
     bool native = topology(mode, &topo);
     if (!native && mode != 6 && mode != 7 && mode != 9) { stat_skipped++; return; }
-    if (g_fsr_on) {  // FSR: the frame's structure; at the start of the HUD FSR runs before this draw (fsr.c)
+    if (g_fsr_on || g_post_on) {  // FSR, shader mods: the frame's structure (fsr.c, post.c)
         FsrDraw fd = {.color0 = st.rt.ncolor ? st.rt.color[0] : NULL, .depth = st.rt.depth, .count = (uint32_t)r->x[2],
                       .depth_write = st.ds[0] && st.ds[1], .vubuf = &st.ubuf[0][0].addr, .nvubuf = 18};
         for (int i = 0; i < pr->fi->ntex && fd.ntex < 16; i++) fd.tex[fd.ntex++] = shader_texture_object(1, &pr->fi->tex[i]);
-        vk_fsr_draw(&fd);
+        if (g_post_on) vk_post_draw(&fd);  // (at the start of the HUD: the mods' passes, then FSR, before this draw)
+        if (g_fsr_on) vk_fsr_draw(&fd);
     }
 
     if (st.rt_dirty) vk_end_pass();  // (MSAA: the ending pass marks its targets for resolving before they are read)

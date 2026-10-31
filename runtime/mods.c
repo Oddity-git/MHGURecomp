@@ -51,6 +51,24 @@ int mods_romfs_layers(const char **out, int max) {
     return k;
 }
 
+int mods_shader_dirs(const char **out, int max) {
+    list_mods();
+    int k = 0;
+    for (int i = 0; i < g_nmods && (!out || k < max); i++) {
+        char mod[1100], path[1100], post[1200];
+        snprintf(mod, sizeof mod, "%s/%s", mods_dir(), g_names[i]);
+        if (!is_dir(mod) || !mods_find_dir(mod, "shaders", 3, path, sizeof path)) continue;
+        snprintf(post, sizeof post, "%s/post", path);
+        if (!is_dir(post)) continue;
+        if (out) {
+            out[k] = strdup(path);
+            LOG("[mods] %s: shaders %s\n", g_names[i], path);
+        }
+        k++;
+    }
+    return k;
+}
+
 // ------------------------------------------------------------------ exefs modules
 const char *mods_exefs_file(const char *name, char *path, size_t n, bool (*skip)(const char *path, const char *mod)) {
     list_mods();

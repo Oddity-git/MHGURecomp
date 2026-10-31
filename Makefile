@@ -250,7 +250,7 @@ $(O)/rt/%.o: runtime/%.c $(RT_HDRS)
 $(O)/rt/forge_imgui.o: runtime/forge_imgui_thunks.inc $(IMGUI)/cimgui.h
 $(O)/rt/forge_imgui.o: RTFLAGS += -DCIMGUI_NO_EXPORT -Wno-unused-variable
 
-$(O)/rt/overlay.o: runtime/overlay.cpp runtime/overlay.h runtime/forge.h
+$(O)/rt/overlay.o: runtime/overlay.cpp runtime/overlay.h runtime/forge.h runtime/shader_mods.h
 	@mkdir -p $(dir $@)
 	$(CXX) $(IMGUIFLAGS) $(if $(filter 1,$(NULL_GPU)),-DMHGU_NULL_BACKEND) -Wall -Iruntime -c $< -o $@
 

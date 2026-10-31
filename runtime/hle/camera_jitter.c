@@ -28,6 +28,7 @@
 #include "../camera_jitter.h"
 #include "../config.h"
 #include "../hle.h"
+#include "../mods.h"
 
 #define FN_LOOKAT     0x21c33cu  // look-at: r0 = out view matrix, r1 = camera
 #define FN_PROJECTION 0x21c358u  // projection: r0 = out matrix, r1 = camera
@@ -146,10 +147,10 @@ void camjit_init(void) {
     const char *e = getenv("MHGU_JITTER_TEST");
     g_test = e && sscanf(e, "%f,%f", &g_test_xy[0], &g_test_xy[1]) == 2;
     g_log = getenv("MHGU_JITTER_LOG") != NULL;
-    if (!g_config.fsr && !g_test) return;
+    if (!g_config.fsr && !g_test && !mods_shader_dirs(NULL, 0)) return;  // (shader mods: the camera, without jitter)
     g_rw = g_render_size[0], g_rh = g_render_size[1];
     fnhook_set(FN_LOOKAT, hle_register("camjit:lookat", lookat));
     fnhook_set(FN_PROJECTION, hle_register("camjit:projection", projection));
     if (g_test) LOG("[camjit] test: the 3D picture shifted by (%g, %g) render pixels (x right, y down)\n", g_test_xy[0], g_test_xy[1]);
-    else LOG("[camjit] main camera hooked (main+0x1C33C view, main+0x1C358 projection): jitter while FSR runs\n");
+    else LOG("[camjit] main camera hooked (main+0x1C33C view, main+0x1C358 projection): jitter while FSR runs, for shader mods\n");
 }

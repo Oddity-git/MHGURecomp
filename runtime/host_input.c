@@ -548,6 +548,10 @@ void host_input_event(const SDL_Event *e) {
                 snprintf(g_burst_name, sizeof g_burst_name, "burst_%llu_%d", (unsigned long long)t, nshot++);
                 g_burst_index = 0;
                 g_burst_left = 8;
+            } else if (e->key.scancode == SDL_SCANCODE_F6) {  // shader mods off / on, Shift+F6: their files read again
+                void vk_post_toggle(void), vk_post_reload(void);
+                if (e->key.mod & SDL_KMOD_SHIFT) vk_post_reload();
+                else vk_post_toggle();
             } else if (e->key.scancode == SDL_SCANCODE_F10) {
                 g_dump_request = 2;  // (debug) every render pass of the next 2 frames, as "dump 2"
             } else if (e->key.scancode == SDL_SCANCODE_F7) {  // MSAA off / 2x / 4x / 8x (to compare; the settings set it)

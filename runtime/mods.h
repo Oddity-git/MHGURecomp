@@ -3,6 +3,8 @@
 // layered over the game's own files at start, nothing is changed on disk. A mod folder may hold:
 //   romfs/   loose files layered over the game's RomFS (same paths as in the game's romfs/ folder; a bare nativeNX/
 //            folder counts as romfs/nativeNX/)
+//   shaders/ post/*.glsl: passes the renderer runs over the game's 3D picture before the HUD (runtime/nvn/vulkan/post.c,
+//            docs/SHADER_MODS.md)
 //   exefs/   IPSwitch patches (*.pchtxt) and IPS / IPS32 patches (<build id>.ips) for the game's code modules, and
 //            code modules of the mod's own (subsdk0..subsdk9 NSOs, as Atmosphere and the emulators load them). The
 //            port runs the game's code compiled ahead of time (tools/gen.py), which never reads its instructions:
@@ -27,6 +29,8 @@ void mods_patch_code(void);  // then the patches of main's and sdk's code: once 
 // The mods' exefs/<name> (a subsdk): its path in path, and the mod's name (the last mod that has one); NULL: none.
 // skip: a file to pass over (and its mod's name), else NULL.
 const char *mods_exefs_file(const char *name, char *path, size_t n, bool (*skip)(const char *path, const char *mod));
+// The mods' shaders/ folders that hold a post/ (malloc'd paths, in load order); out NULL: only how many
+int mods_shader_dirs(const char **out, int max);
 void forge_init(void);  // Forge plugins from the mods' RomFS (runtime/forge.c): before the game starts
 void hpscale_init(void);  // large monster HP by the number of hunters (runtime/hle/hpscale.c)
 void villagehub_init(void);  // Village quests at the Hub / Pub counter (runtime/hle/villagehub.c)

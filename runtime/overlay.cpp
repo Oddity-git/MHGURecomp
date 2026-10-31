@@ -14,6 +14,7 @@
 #include <atomic>
 #include <cfloat>
 #include <cstdio>
+#include <cstring>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -32,6 +33,7 @@ static void ImGui_ImplVulkan_UpdateTexture(ImTextureData *) {}
 #include "overlay.h"
 #include "hle/chat.h"
 #include "settings_panel.h"
+#include "shader_mods.h"
 
 #define LOG(...) fprintf(stderr, __VA_ARGS__)
 
@@ -43,6 +45,7 @@ SDL_Window *ui_window(void);
 
 static std::atomic<bool> g_enabled, g_ready, g_open;
 static std::atomic<bool> g_settings_open, g_forge_open;
+static std::atomic<bool> g_shader_open;  // the Shader mods window (F5)
 static int g_menu_key;
 static float g_font_size;
 static ImGuiStyle g_base_style;  // (unscaled; scaled copies follow the window's height)
@@ -129,7 +132,7 @@ static ImGuiKey key_of(SDL_Scancode sc, SDL_Keycode kc) {
 
 static void set_open(bool open) {
     g_forge_open = open;
-    g_open = open || g_settings_open;
+    g_open = open || g_settings_open || g_shader_open;
     SDL_Window *w = ui_window();
     if (g_open) SDL_ShowCursor();  // (full screen hides it: runtime/ui.c)
     else if (w && (SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN)) SDL_HideCursor();
@@ -165,6 +168,13 @@ bool overlay_event(const SDL_Event *e) {
         overlay_toggle_settings();
         return true;
     }
+#ifndef MHGU_NULL_BACKEND
+    if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && e->key.scancode == SDL_SCANCODE_F5 && vk_post_available()) {
+        g_shader_open = !g_shader_open;  // (the Shader mods window: shader_window)
+        set_open(g_forge_open);
+        return true;
+    }
+#endif
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && (int)e->key.scancode == g_menu_key) {
         set_open(!g_forge_open);
         return true;
@@ -470,6 +480,66 @@ static std::atomic<uint32_t> g_disp_w, g_disp_h;
 static bool g_plugins_init;
 static uint64_t g_last_ns;
 
+#ifndef MHGU_NULL_BACKEND
+// The Shader mods window (F5): every effect of the shader mods (runtime/nvn/vulkan/post.c) on / off, with the
+// settings its passes marked, changed while the game runs and kept in the mod's shaders/settings.ini
+static void shader_window(float scale) {
+    bool keep = true;
+    ImGui::SetNextWindowPos(ImVec2(60 * scale, 60 * scale), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(440 * scale, 520 * scale), ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Shader mods (F5)", &keep)) {
+        bool on = vk_post_active();
+        if (ImGui::Checkbox("Effects on (F6)", &on)) vk_post_toggle();
+        ImGui::SameLine();
+        if (ImGui::Button("Reload files (Shift+F6)")) vk_post_reload();
+        bool changed = false;
+        vk_post_lock();
+        PostSetting *st;
+        int ns = vk_post_settings(&st), ne = vk_post_effects();
+        const char *mod = nullptr;
+        for (int e = 0; e < ne; e++) {
+            if (!mod || strcmp(mod, vk_post_effect_mod(e))) ImGui::SeparatorText(mod = vk_post_effect_mod(e));
+            ImGui::PushID(e);
+            changed |= ImGui::Checkbox("##on", vk_post_effect_on(e));
+            ImGui::SameLine();
+            if (ImGui::TreeNode(vk_post_effect_name(e))) {
+                for (int k = 0; k < ns; k++) {
+                    PostSetting *p = &st[k];
+                    if (p->effect != e) continue;
+                    ImGui::PushID(k);
+                    if (p->type == POST_COLOR) {
+                        changed |= ImGui::ColorEdit3(p->label, p->val, ImGuiColorEditFlags_Float);
+                    } else if (p->type == POST_INT) {
+                        int v = (int)(p->val[0] + 0.5f);
+                        if (ImGui::SliderInt(p->label, &v, (int)p->lo, (int)p->hi)) p->val[0] = (float)v, changed = true;
+                    } else {
+                        bool wide = p->lo > 0 && p->hi / p->lo >= 100;  // (thicknesses and the like: a log scale)
+                        changed |= ImGui::SliderFloat(p->label, &p->val[0], p->lo, p->hi, "%.4g",
+                                                      wide ? ImGuiSliderFlags_Logarithmic : 0);
+                    }
+                    if (p->help[0] && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", p->help);
+                    ImGui::PopID();
+                }
+                if (ImGui::SmallButton("Defaults")) {
+                    for (int k = 0; k < ns; k++)
+                        if (st[k].effect == e) memcpy(st[k].val, st[k].def, sizeof st[k].val);
+                    changed = true;
+                }
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+        }
+        vk_post_unlock();
+        if (changed) vk_post_changed();
+    }
+    ImGui::End();
+    if (!keep) {
+        g_shader_open = false;
+        set_open(g_forge_open);
+    }
+}
+#endif
+
 static void snap_clear(void) {
     for (ImDrawList *l : g_snap.CmdLists) IM_DELETE(l);
     g_snap.CmdLists.resize(0);
@@ -548,6 +618,9 @@ void overlay_frame(void *cpu) {
         ImGui::End();
         if (!keep) set_open(false);
     }
+#ifndef MHGU_NULL_BACKEND
+    if (g_shader_open) shader_window(scale);
+#endif
     forge_imgui_run(cpu, FORGE_IMGUI_FREE_RENDER);
     if (notice) draw_notice(now, scale);
     if (chat) draw_chat(line, now, scale);
