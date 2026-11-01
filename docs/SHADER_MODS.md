@@ -14,21 +14,27 @@ folder into `mods/` and stop loading when it is removed or turned off in the Mod
 
 ## Effects and settings (the Shader mods window, F5)
 
-**F5** opens a window with every effect of the shader mods: a switch for each, and sliders for its settings,
-changed while the game runs. What is changed is kept in the mod's `shaders/settings.ini`.
+**F5** opens a window with every effect of the shader mods: a switch for each, its description, and sliders for its
+settings, changed while the game runs. What is changed is kept in the mod's `shaders/settings.ini` (only what differs
+from the pass's own values; a renamed setting starts from its new default).
 
 - Passes whose first line is `// Name: what it does` with the same Name are one effect, turned on and off together
   (`// Name (off): ...`: it starts off).
+- The rest of that first comment, up to a blank line or code, is the effect's description in the window: write it
+  for players, and put notes for modders after a blank line.
 - A constant with a range in its comment is a setting:
 
 ```glsl
-const float RADIUS = 90.0;  // [10, 400] Radius: how far round a point to look (cm)
-const int SAMPLES = 12;     // [4, 32] Samples: more is smoother and slower
-const vec3 TINT = vec3(1.0, 0.9, 0.8);  // [color] Tint: colour of the glow
+const float RADIUS_M = 0.9;  // [0.1, 4, m] Shadow reach: how far from a crease the shading spreads.
+const int SAMPLES = 12;      // [4, 32] Quality: samples per pixel. More is smoother but slower.
+const vec3 TINT = vec3(1.0, 0.9, 0.8);  // [color] Tint: colour of the glow.
+#define RADIUS (RADIUS_M * 100.0)  // (the pass converts: world units are centimetres)
 ```
 
-  The window shows the label (before the `:`) with the rest as its tooltip. The value comes from a uniform buffer, so
-  moving a slider needs no compiling.
+  `[lo, hi, unit]`: the slider's range and an optional unit shown after the value (`m`, `cm`, `%`, `stops`, `px`,
+  `x`, ...). The unit is only a label; the pass converts. The window shows the label (before the `:`) and the rest
+  as help text under the slider. The decimals follow the range; a range of 100x or more gets a logarithmic slider.
+  The value comes from a uniform buffer, so moving a slider needs no compiling.
 
 ## Writing a pass
 
@@ -51,6 +57,7 @@ and can use:
 | `u.info` | seconds since start, frame number, number of passes |
 | `u.cam` | near, far, vertical field of view (radians) |
 | `u.eye` | the camera's position in world space |
+| `u.game` | the map (the game's stage number, 0: not known), 1 on a hunt, the quest's number, a random 0..1 drawn as each quest starts (also shown at the top of the F5 window) |
 | `u_pass.pass.x` | this pass's index |
 | `raw_depth(uv)`, `view_pos(uv)`, `view_dist(uv)`, `world_pos(uv)` | the scene at uv |
 | `view_normal(uv)` | the surface normal at uv (view space, from the depth) |
@@ -60,7 +67,9 @@ and can use:
 | `u_light.pos` | the sun / moon on screen: uv, strength 0..1, w = 1 when found (the brightest part of the sky) |
 | `u_light.color` | its colour; a = the brightness the sky round it is measured against |
 | `u_light.sky` | the sky's average colour (kept while no sky is in view) |
-| `u_light.state` | x: a height that follows the camera's slowly (camera - 300 cm), for fog; w = 1 once set |
+| `u_light.state` | x: a height that follows the camera's slowly (camera - 300 cm), for fog; y: outdoors 0..1 (0 with a ceiling above the camera, as in caves; follows in about a second); w = 1 once set |
+| `u_light.sun` | towards the sun / moon in world space (unit length): learnt while it is on screen, kept while it is not; w = 1 once seen |
 
 The alpha channel passes from one pass to the next, so a pass can leave data there for the next one (the Lighting
-mod's ambient occlusion does); the last pass should put `u_original`'s alpha back.
+mod's ambient occlusion does); the last pass should put `u_original`'s alpha back. A pass that reads `u_original`
+as its input (the Lighting mod's bounce light) must run before any other pass changes the picture.

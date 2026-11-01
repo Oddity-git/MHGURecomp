@@ -14,8 +14,9 @@
 // F6 turns the passes off and on (to compare), Shift+F6 reads the files again (to tune a pass while the game runs).
 //
 // Effects and settings (shader_mods.h): passes whose first line is "// Name: ..." with the same Name are one effect,
-// turned on and off together. A constant with a range comment is a setting:
-//     const float RADIUS = 90.0;  // [10, 300] Radius: how far round a point to look (cm)
+// turned on and off together; that first comment (up to the first line that is not a comment) is the description the
+// window shows. A constant with a range comment is a setting, optionally with a unit shown beside its value:
+//     const float RADIUS_M = 0.9;  // [0.1, 4, m] Radius: how far round a point to look
 //     const vec3 TINT = vec3(1.0, 0.9, 0.8);  // [color] Tint
 // its line becomes a #define that reads the value from u_set (binding 6), so the Shader mods window (F5) changes it
 // while the game runs, with no compiling. Effects' on / off and the values are kept in the mod's
@@ -53,6 +54,8 @@ static const char PRELUDE[] =
     "    vec4 info;            // seconds since start, frame number, number of passes, 0\n"
     "    vec4 cam;             // near, far (world units), vertical field of view (radians), 0\n"
     "    vec4 eye;             // the camera's position (world space), 1\n"
+    "    vec4 game;            // the map (the game's stage number; 0: not known), 1 on a hunt (a quest is being\n"
+    "                          // played), the quest's number, a random 0..1 drawn as each quest starts\n"
     "} u;\n"
     "layout(push_constant) uniform Pass { vec4 pass; } u_pass;  // x: this pass's index (0, 1, ...)\n"
     "layout(set = 0, binding = 5, std430)\n"
@@ -63,7 +66,9 @@ static const char PRELUDE[] =
     "    vec4 pos;    // the sun / moon on screen: uv, strength (0..1), 1 = found (0: not in view)\n"
     "    vec4 color;  // its colour, the brightness the sky around it is measured against\n"
     "    vec4 sky;    // the sky's average colour (kept, fading, while no sky is in view), share of the screen\n"
-    "    vec4 state;  // a slowly following height: the camera's minus 300 (world units; fog base), 1 = set\n"
+    "    vec4 state;  // x: a slowly following height, the camera's minus 300 (world units; fog base); y: outdoors, 0..1\n"
+    "                 // (0 under a roof or in a cave: what is above the camera is near; follows in about a second); w: 1 = set\n"
+    "    vec4 sun;    // towards the sun / moon (world space, unit length; kept while it is out of view), 1 = seen\n"
     "} u_light;\n"
     "layout(set = 0, binding = 6, std140) uniform Settings { vec4 v[256]; } u_set;  // (the settings' values)\n"
     "float raw_depth(vec2 uv) { return textureLod(u_depth, uv, 0.0).r; }\n"
@@ -102,10 +107,11 @@ static const char PRELUDE[] =
 static const char LIGHT_MAIN[] =
     "shared float s_a[64], s_b[64], s_c[64];\n"
     "shared vec4 s_v[64];\n"
-    "void reduce(uint t) {  // sums s_a, s_b, s_v; maximum of s_c\n"
+    "shared vec2 s_u[64];\n"
+    "void reduce(uint t) {  // sums s_a, s_b, s_v, s_u; maximum of s_c\n"
     "    for (uint k = 32u; k > 0u; k >>= 1) {\n"
     "        barrier();\n"
-    "        if (t < k) { s_a[t] += s_a[t + k]; s_b[t] += s_b[t + k]; s_c[t] = max(s_c[t], s_c[t + k]); s_v[t] += s_v[t + k]; }\n"
+    "        if (t < k) { s_a[t] += s_a[t + k]; s_b[t] += s_b[t + k]; s_c[t] = max(s_c[t], s_c[t + k]); s_v[t] += s_v[t + k]; s_u[t] += s_u[t + k]; }\n"
     "    }\n"
     "    barrier();\n"
     "}\n"
@@ -116,15 +122,19 @@ static const char LIGHT_MAIN[] =
     "    int total = ls.x * ls.y;\n"
     "    float sum = 0.0, n = 0.0, mx = 0.0;\n"
     "    vec3 rgb = vec3(0.0);\n"
+    "    vec2 up = vec2(0.0);  // texels looking up; of those, open (sky, or nothing within 30 m)\n"
     "    for (int i = int(t); i < total; i += 64) {\n"
     "        ivec2 p = ivec2(i % ls.x, i / ls.x);\n"
     "        vec2 uv = (vec2(p) + 0.5) / vec2(ls);\n"
-    "        if (!is_sky(uv)) continue;\n"
+    "        bool sky_here = is_sky(uv);\n"
+    "        vec3 wd = normalize((u.inv_view * vec4(view_pos_at(uv, 1.0), 0.0)).xyz);\n"
+    "        if (wd.y > 0.3) up += vec2(1.0, sky_here || length(view_pos(uv)) > 3000.0 ? 1.0 : 0.0);\n"
+    "        if (!sky_here) continue;\n"
     "        vec3 c = texelFetch(u_original, p, lod).rgb;\n"
     "        float l = luma(c);\n"
     "        sum += l, n += 1.0, mx = max(mx, l), rgb += c;\n"
     "    }\n"
-    "    s_a[t] = sum, s_b[t] = n, s_c[t] = mx, s_v[t] = vec4(rgb, 0.0);\n"
+    "    s_a[t] = sum, s_b[t] = n, s_c[t] = mx, s_v[t] = vec4(rgb, 0.0), s_u[t] = up;\n"
     "    reduce(t);\n"
     "    float n_sky = s_b[0], avg = n_sky > 0.0 ? s_a[0] / n_sky : 0.0, top = s_c[0];\n"
     "    vec3 sky_rgb = n_sky > 0.0 ? s_v[0].rgb / n_sky : vec3(0.0);\n"
@@ -141,7 +151,9 @@ static const char LIGHT_MAIN[] =
     "        cen += uv * k, col += c * k, w += k;\n"
     "    }\n"
     "    barrier();\n"
-    "    s_a[t] = cen.x, s_b[t] = cen.y, s_c[t] = 0.0, s_v[t] = vec4(col, w);\n"
+    "    vec2 up_all = s_u[0];\n"
+    "    barrier();\n"
+    "    s_a[t] = cen.x, s_b[t] = cen.y, s_c[t] = 0.0, s_v[t] = vec4(col, w), s_u[t] = vec2(0.0);\n"
     "    reduce(t);\n"
     "    if (t != 0u) return;\n"
     "    float wt = s_v[0].a;\n"
@@ -153,7 +165,13 @@ static const char LIGHT_MAIN[] =
     "    vec3 sky = n_sky > 0.0 ? sky_rgb : u_light.sky.rgb;\n"
     "    u_light.sky = vec4(init ? mix(u_light.sky.rgb, sky, 0.05) : sky, n_sky / float(total));\n"
     "    float base = u.eye.y - 300.0;\n"
-    "    u_light.state = vec4(init && abs(u_light.state.x - base) < 5000.0 ? mix(u_light.state.x, base, 0.02) : base, 0.0, 0.0, 1.0);\n"
+    "    float outdoors = init ? u_light.state.y : 1.0;  // (looking down: kept as it was)\n"
+    "    if (up_all.x >= 8.0) outdoors = mix(outdoors, up_all.y / up_all.x > 0.25 ? 1.0 : 0.0, 0.03);\n"
+    "    u_light.state = vec4(init && abs(u_light.state.x - base) < 5000.0 ? mix(u_light.state.x, base, 0.02) : base, outdoors, 0.0, 1.0);\n"
+    "    if (found && u_light.pos.z > 0.3) {  // (a clear sun or moon: its direction, followed smoothly)\n"
+    "        vec3 d = normalize((u.inv_view * vec4(normalize(view_pos_at(u_light.pos.xy, 1.0)), 0.0)).xyz);\n"
+    "        u_light.sun = vec4(u_light.sun.w > 0.5 ? normalize(mix(u_light.sun.xyz, d, 0.05)) : d, 1.0);\n"
+    "    }\n"
     "}\n";
 
 static const char EPILOGUE[] =
@@ -165,10 +183,11 @@ static const char EPILOGUE[] =
 
 typedef struct {
     float proj[16], inv_proj[16], view[16], inv_view[16];
-    float size[4], info[4], cam[4], eye[4];
+    float size[4], info[4], cam[4], eye[4], game[4];
 } FrameU;
 
 #define MAX_PASS 32
+#define LIGHT_BYTES 80  // (u_light: five vec4)
 typedef struct {
     char name[160];  // mod/file, for the log
     VkPipeline pipe;
@@ -178,6 +197,7 @@ typedef struct {
 #define MAX_SET 256  // (u_set's size)
 typedef struct {
     char name[64], mod[128];
+    char help[600];  // the pass's first comment: what the effect does
     int dir;  // dirs[]: the mod's shaders/ folder (its settings.ini)
     bool on, def_on;  // on now, on unless settings.ini says otherwise ("// Name (off): ..." in a pass: off)
 } Effect;
@@ -243,6 +263,21 @@ static int effect_of(int dir, const char *mod, const char *file, const char *bod
     snprintf(e->name, sizeof e->name, "%s", name);
     snprintf(e->mod, sizeof e->mod, "%s", mod);
     e->dir = dir, e->on = e->def_on = !off;
+    // the description: the first line after "Name:", then every following comment line, up to the first other line
+    size_t hn = 0;
+    e->help[0] = 0;
+    const char *q = body;
+    for (bool first = true; !strncmp(q, "//", 2); first = false) {
+        const char *a = q + 2, *end = a + strcspn(a, "\r\n");
+        if (first) { const char *c = memchr(a, ':', (size_t)(end - a)); a = c ? c + 1 : a; }
+        while (a < end && *a == ' ') a++;
+        int l = (int)(end - a);
+        if (l > 0 && hn + (size_t)l + 2 < sizeof e->help) hn += (size_t)snprintf(e->help + hn, sizeof e->help - hn, "%s%.*s", hn ? " " : "", l, a);
+        q = end;
+        if (*q == '\r') q++;
+        if (*q == '\n') q++;  // (one line break only: a blank line ends the description)
+    }
+    if (e->help[0] >= 'a' && e->help[0] <= 'z') e->help[0] = (char)(e->help[0] - 'a' + 'A');
     return neffect++;
 }
 
@@ -270,6 +305,7 @@ static bool setting_line(const char *line, int e, char *out, size_t on) {
     int kind = !strcmp(type, "float") ? POST_FLOAT : !strcmp(type, "int") ? POST_INT : !strcmp(type, "vec3") ? POST_COLOR : -1;
     if (kind < 0) return false;
     float lo = 0, hi = 1, v[3] = {0, 0, 0};
+    char unit[16] = "";
     const char *after;
     if (kind == POST_COLOR) {
         if (strncmp(cm, "[color]", 7)) return false;
@@ -278,8 +314,18 @@ static bool setting_line(const char *line, int e, char *out, size_t on) {
         if (!q || sscanf(q + 1, "%f , %f , %f", &v[0], &v[1], &v[2]) != 3) return false;
     } else {
         int k = 0;
-        if (sscanf(cm, "[%f , %f]%n", &lo, &hi, &k) != 2 || !k) return false;
-        after = cm + k;
+        if (sscanf(cm, "[%f , %f%n", &lo, &hi, &k) != 2 || !k) return false;
+        const char *r = cm + k;
+        while (*r == ' ') r++;
+        if (*r == ',') {  // a unit: "[0.1, 4, m]"
+            r++;
+            size_t ul = strcspn(r, "]\r\n");
+            if (r[ul] != ']') return false;
+            snprintf(unit, sizeof unit, "%.*s", (int)(ul < sizeof unit ? ul : sizeof unit - 1), r);
+            r += ul;
+        }
+        if (*r != ']') return false;
+        after = r + 1;
         v[0] = strtof(val, NULL);
     }
     int idx = -1;
@@ -292,6 +338,7 @@ static bool setting_line(const char *line, int e, char *out, size_t on) {
         memset(st, 0, sizeof *st);
         snprintf(st->name, sizeof st->name, "%s", name);
         st->effect = e, st->type = kind, st->lo = lo, st->hi = hi;
+        snprintf(st->unit, sizeof st->unit, "%s", trim(unit));
         memcpy(st->def, v, sizeof v);
         memcpy(st->val, v, sizeof v);
         char text[300];
@@ -459,6 +506,7 @@ void vk_post_unlock(void) { pthread_mutex_unlock(&set_lock); }
 int vk_post_effects(void) { return neffect; }
 const char *vk_post_effect_name(int e) { return effects[e].name; }
 const char *vk_post_effect_mod(int e) { return effects[e].mod; }
+const char *vk_post_effect_help(int e) { return effects[e].help; }
 bool *vk_post_effect_on(int e) { return &effects[e].on; }
 int vk_post_settings(PostSetting **out) { *out = sets; return nset; }
 void vk_post_changed(void) {
@@ -497,11 +545,11 @@ void vk_post_init(void) {
                               .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
                               .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .maxLod = VK_LOD_CLAMP_NONE};
     VK_CHECK(vkCreateSampler(g_vk.dev, &si, NULL, &mip_sampler));
-    VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = 64,
+    VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = LIGHT_BYTES,
                              .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT};
     VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
     VK_CHECK(vmaCreateBuffer(g_vk.vma, &bi, &ai, &light_buf, &light_mem, NULL));
-    vkCmdFillBuffer(vk_upload_cmd(), light_buf, 0, 64, 0);
+    vkCmdFillBuffer(vk_upload_cmd(), light_buf, 0, LIGHT_BYTES, 0);
     {  // the light pass: the prelude with u_light writable, and LIGHT_MAIN
         static const char head[] = "#version 450\n#define LIGHT_PASS 1\n";
         size_t n = sizeof head + sizeof PRELUDE + sizeof LIGHT_MAIN;
@@ -566,6 +614,36 @@ static void reload(void) {
             }
     pthread_mutex_unlock(&set_lock);
     LOG("[post] Shift+F6: %d pass(es) read again\n", npass);
+}
+
+// ================================================================== the game's state (u.game)
+// Read from the game's memory (main, v1.4.0; the addresses runtime/hle/hpscale.c and quickhunt.c use)
+#define G_SQUEST      0x1a8ad90u  // sQuest *: +0xa4 cQuestData * of the quest being played (+0x8 quest number)
+#define G_GAMECONTROL 0x1a8ca48u  // sGameControl *: +0x48 u16 the stage (map), +0x4c area type (0 Hub, 1-6 villages,
+                                  // 7 Hunters' Pub)
+static bool guest_ptr(uint32_t a) { return a >= 0x08000000u && a < 0xF0000000u && !(a & 3); }
+static struct { uint32_t stage, area, quest; float roll; bool hunt; } game;
+
+static void game_state(float out[4]) {
+    static uint32_t last_quest = ~0u, last_stage = ~0u, last_area = ~0u, seed = 0x9e3779b9u;
+    uint32_t gc = LD32(G_GAMECONTROL), q = LD32(G_SQUEST);
+    uint32_t stage = guest_ptr(gc) ? LD16(gc + 0x48) : 0, area = guest_ptr(gc) ? LD32(gc + 0x4c) : ~0u;
+    uint32_t qd = guest_ptr(q) ? LD32(q + 0xa4) : 0, quest = guest_ptr(qd) ? LD32(qd + 8) : 0;
+    bool hunt = quest != 0 && area > 7;  // (towns are area types 0-7)
+    if (quest != last_quest) {  // (a new random number for each quest: rain by chance, and the like)
+        seed ^= (uint32_t)plat_now_ns();
+        seed ^= seed << 13, seed ^= seed >> 17, seed ^= seed << 5;
+        game.roll = (float)(seed >> 8) / 16777216.0f;
+    }
+    if (quest != last_quest || stage != last_stage || area != last_area)
+        LOG("[post] map %u, area type %u, quest %u%s (roll %.2f)\n", stage, area, quest, hunt ? ", on a hunt" : "", game.roll);
+    last_quest = quest, last_stage = stage, last_area = area;
+    game.stage = stage, game.area = area, game.quest = quest, game.hunt = hunt;
+    out[0] = (float)stage, out[1] = hunt ? 1.0f : 0.0f, out[2] = (float)quest, out[3] = game.roll;
+}
+
+void vk_post_game(unsigned *stage, unsigned *area, unsigned *quest, bool *hunt) {
+    *stage = game.stage, *area = game.area, *quest = game.quest, *hunt = game.hunt;
 }
 
 // ================================================================== the frame
@@ -657,7 +735,7 @@ static VkDescriptorSet make_set(TexBackend *scene, TexBackend *depth, TexBackend
         {mip_sampler, vk_image_view(orig, VK_IMAGE_VIEW_TYPE_2D, orig->format, 0, orig->levels, 0, 1, id, VK_IMAGE_ASPECT_COLOR_BIT), VK_IMAGE_LAYOUT_GENERAL},
         {VK_NULL_HANDLE, vk_image_view(out, VK_IMAGE_VIEW_TYPE_2D, out->format, 0, 1, 0, 1, id, VK_IMAGE_ASPECT_COLOR_BIT), VK_IMAGE_LAYOUT_GENERAL}};
     for (int i = 0; i < 4; i++) if (!ii[i].imageView) return VK_NULL_HANDLE;
-    VkDescriptorBufferInfo bi[3] = {{ubo.buf, ubo.off, sizeof(FrameU)}, {light_buf, 0, 64}, {set_span.buf, set_span.off, MAX_SET * 16}};
+    VkDescriptorBufferInfo bi[3] = {{ubo.buf, ubo.off, sizeof(FrameU)}, {light_buf, 0, LIGHT_BYTES}, {set_span.buf, set_span.off, MAX_SET * 16}};
     VkWriteDescriptorSet w[7];
     for (uint32_t i = 0; i < 7; i++) {
         w[i] = (VkWriteDescriptorSet){.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = set, .dstBinding = i,
@@ -701,6 +779,7 @@ static void run(void) {
     f->cam[0] = cam.near, f->cam[1] = cam.far, f->cam[2] = cam.fovy, f->cam[3] = 0;
     last_cam[0] = cam.near, last_cam[1] = cam.far, last_cam[2] = cam.fovy;
     f->eye[0] = f->inv_view[12], f->eye[1] = f->inv_view[13], f->eye[2] = f->inv_view[14], f->eye[3] = 1.0f;
+    game_state(f->game);
     set_span = vk_transient(MAX_SET * 16, g_vk.props.limits.minUniformBufferOffsetAlignment);
     bool pass_on[MAX_PASS];
     {
