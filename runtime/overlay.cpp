@@ -14,6 +14,7 @@
 #include <atomic>
 #include <cfloat>
 #include <cstdio>
+#include <cstring>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -33,6 +34,7 @@ static void ImGui_ImplVulkan_UpdateTexture(ImTextureData *) {}
 #include "overlay.h"
 #include "hle/chat.h"
 #include "settings_panel.h"
+#include "shader_mods.h"
 
 #define LOG(...) fprintf(stderr, __VA_ARGS__)
 
@@ -44,6 +46,7 @@ SDL_Window *ui_window(void);
 
 static std::atomic<bool> g_enabled, g_ready, g_open;
 static std::atomic<bool> g_settings_open, g_forge_open;
+static std::atomic<bool> g_shader_open;  // the Shader mods window (F5)
 static int g_menu_key;
 static float g_font_size;
 static ImGuiStyle g_base_style;  // (unscaled; scaled copies follow the window's height)
@@ -130,7 +133,7 @@ static ImGuiKey key_of(SDL_Scancode sc, SDL_Keycode kc) {
 
 static void set_open(bool open) {
     g_forge_open = open;
-    g_open = open || g_settings_open;
+    g_open = open || g_settings_open || g_shader_open;
     SDL_Window *w = ui_window();
     if (g_open) SDL_ShowCursor();  // (full screen hides it: runtime/ui.c)
     else if (w && (SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN)) SDL_HideCursor();
@@ -169,6 +172,13 @@ bool overlay_event(const SDL_Event *e) {
         overlay_toggle_settings();
         return true;
     }
+#ifndef MHGU_NULL_BACKEND
+    if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && e->key.scancode == SDL_SCANCODE_F5 && vk_post_available()) {
+        g_shader_open = !g_shader_open;  // (the Shader mods window: shader_window)
+        set_open(g_forge_open);
+        return true;
+    }
+#endif
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && (int)e->key.scancode == g_menu_key) {
         set_open(!g_forge_open);
         return true;
@@ -489,6 +499,120 @@ static std::atomic<uint32_t> g_disp_w, g_disp_h;
 static bool g_plugins_init;
 static uint64_t g_last_ns;
 
+#ifndef MHGU_NULL_BACKEND
+// The Shader mods window (F5): every effect of the shader mods (runtime/nvn/vulkan/post.c) on / off, with the
+// settings its passes marked, changed while the game runs and kept in the mod's shaders/settings.ini
+// A setting's value as the window shows it: the decimals its range calls for, then its unit
+static void setting_format(const PostSetting *p, char *out, size_t n) {
+    char unit[40] = "";
+    if (p->unit[0]) {  // (a '%' in the unit is doubled: the text is a printf format)
+        size_t k = 0;
+        unit[k++] = ' ';
+        for (const char *c = p->unit; *c && k + 3 < sizeof unit; c++) {
+            if (*c == '%') unit[k++] = '%';
+            unit[k++] = *c;
+        }
+        unit[k] = 0;
+        if (!strcmp(p->unit, "%")) memmove(unit, unit + 1, strlen(unit));  // ("85%", not "85 %")
+    }
+    float span = p->hi - p->lo;
+    if (p->type == POST_INT) snprintf(out, n, "%%d%s", unit);
+    else snprintf(out, n, "%%.%df%s", span >= 50 ? 0 : span >= 5 ? 1 : span >= 0.5f ? 2 : 3, unit);
+}
+
+static void shader_window(float scale) {
+    bool keep = true;
+    ImGui::SetNextWindowPos(ImVec2(60 * scale, 60 * scale), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(480 * scale, 600 * scale), ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Shader mods (F5)", &keep)) {
+        bool on = vk_post_active();
+        if (ImGui::Checkbox("Effects on (F6)", &on)) vk_post_toggle();
+        ImGui::SameLine();
+        if (ImGui::Button("Reload files (Shift+F6)")) vk_post_reload();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        ImGui::TextWrapped("Tick an effect to use it; open it for its settings. Ctrl+click a slider to type a value, "
+                           "right double-click it for its default.");
+        ImGui::PopStyleColor();
+        unsigned stage, area, quest;
+        bool hunt;
+        vk_post_game(&stage, &area, &quest, &hunt);
+        if (hunt) ImGui::Text("Map %u, on a hunt (quest %u)", stage, quest);
+        else ImGui::Text("Map %u, not on a hunt (area type %u)", stage, area);
+        bool changed = false;
+        vk_post_lock();
+        PostSetting *st;
+        int ns = vk_post_settings(&st), ne = vk_post_effects();
+        const char *mod = nullptr;
+        for (int e = 0; e < ne; e++) {
+            if (!mod || strcmp(mod, vk_post_effect_mod(e))) ImGui::SeparatorText(mod = vk_post_effect_mod(e));
+            ImGui::PushID(e);
+            changed |= ImGui::Checkbox("##on", vk_post_effect_on(e));
+            ImGui::SameLine();
+            const char *about = vk_post_effect_help(e);
+            bool open = ImGui::TreeNode(vk_post_effect_name(e));
+            if (!open && about[0] && ImGui::IsItemHovered()) {
+                ImGui::BeginTooltip();
+                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 30.0f);
+                ImGui::TextUnformatted(about);
+                ImGui::PopTextWrapPos();
+                ImGui::EndTooltip();
+            }
+            if (open) {
+                if (about[0]) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+                    ImGui::TextWrapped("%s", about);
+                    ImGui::PopStyleColor();
+                    ImGui::Spacing();
+                }
+                for (int k = 0; k < ns; k++) {
+                    PostSetting *p = &st[k];
+                    if (p->effect != e) continue;
+                    ImGui::PushID(k);
+                    char fmt[48];
+                    setting_format(p, fmt, sizeof fmt);
+                    if (p->type == POST_COLOR) {
+                        changed |= ImGui::ColorEdit3(p->label, p->val, ImGuiColorEditFlags_Float);
+                    } else if (p->type == POST_INT) {
+                        int v = (int)(p->val[0] + 0.5f);
+                        if (ImGui::SliderInt(p->label, &v, (int)p->lo, (int)p->hi, fmt)) p->val[0] = (float)v, changed = true;
+                    } else {
+                        bool wide = p->lo > 0 && p->hi / p->lo >= 100;  // (distances and the like: a log scale)
+                        changed |= ImGui::SliderFloat(p->label, &p->val[0], p->lo, p->hi, fmt,
+                                                      wide ? ImGuiSliderFlags_Logarithmic : 0);
+                    }
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Right)) {
+                        memcpy(p->val, p->def, sizeof p->val);  // (right double-click: back to its default)
+                        changed = true;
+                    }
+                    if (p->help[0]) {
+                        ImGui::Indent();
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+                        ImGui::TextWrapped("%s", p->help);
+                        ImGui::PopStyleColor();
+                        ImGui::Unindent();
+                    }
+                    ImGui::PopID();
+                }
+                if (ImGui::SmallButton("Defaults")) {
+                    for (int k = 0; k < ns; k++)
+                        if (st[k].effect == e) memcpy(st[k].val, st[k].def, sizeof st[k].val);
+                    changed = true;
+                }
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+        }
+        vk_post_unlock();
+        if (changed) vk_post_changed();
+    }
+    ImGui::End();
+    if (!keep) {
+        g_shader_open = false;
+        set_open(g_forge_open);
+    }
+}
+#endif
+
 static void snap_clear(void) {
     for (ImDrawList *l : g_snap.CmdLists) IM_DELETE(l);
     g_snap.CmdLists.resize(0);
@@ -567,6 +691,9 @@ void overlay_frame(void *cpu) {
         ImGui::End();
         if (!keep) set_open(false);
     }
+#ifndef MHGU_NULL_BACKEND
+    if (g_shader_open) shader_window(scale);
+#endif
     forge_imgui_run(cpu, FORGE_IMGUI_FREE_RENDER);
     if (notice) draw_notice(now, scale);
     if (chat) draw_chat(line, now, scale);

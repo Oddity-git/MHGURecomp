@@ -16,6 +16,7 @@
 
 #include "../../overlay.h"
 #include "fsr.h"
+#include "post.h"
 #include "fsr4.h"
 #include "vk.h"
 
@@ -572,6 +573,7 @@ void backend_present(NvnTexture *t) {
     extern void vi_apply_framerate(void);
     vi_apply_framerate();
     vk_lock();
+    if (g_post_on) vk_post_present(t);  // shader mods: the end of the frame (post.c)
     if (g_fsr_on) t = vk_fsr_present(t);  // FSR: its output-size picture with the HUD (fsr.c)
     TexBackend *b = vk_tex(t, true);
     b->presented = true;
@@ -669,6 +671,7 @@ void backend_init(void) {
     vk_exec_init();
     vk_shaders_init();
     vk_fsr_init();  // ([Upscaler] FSR: fsr.c)
+    vk_post_init();  // (shader mods' post passes: post.c)
     create_swapchain();
     atexit(exit_handler);
 }
