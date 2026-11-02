@@ -6,6 +6,7 @@
 //                          none (the R9's driver), Off: immediate. MHGU_VK_PRESENT=fifo|mailbox|immediate picks the present mode directly.
 //   MHGU_SHOT_AT=<frame>[,<frame>...]   save the window image at those presented frames as shots/frame_N.png
 //   MHGU_FPS=1             frames per second in the log every 2 s
+//   MHGU_NO_BC=1           act as if the GPU had no BC textures, as phone GPUs (they are decoded on the CPU then)
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <math.h>
@@ -17,7 +18,6 @@
 #include "../../overlay.h"
 #include "fsr.h"
 #include "post.h"
-#include "fsr4.h"
 #include "vk.h"
 
 VkG g_vk;
@@ -91,7 +91,7 @@ static void create_instance(void) {
     const char *layers[] = {"VK_LAYER_KHRONOS_validation"};
     VkApplicationInfo app = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .pApplicationName = "MHGURecomp",
                              .pEngineName = "MHGURecomp",
-                             .apiVersion = g_config.fsr && g_config.fsr_upscaler == FSR_UP_4 ? VK_API_VERSION_1_3 : VK_API_VERSION_1_2};  // (FSR 4's shaders use SPIR-V 1.6)
+                             .apiVersion = VK_API_VERSION_1_2};
     VkInstanceCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .pApplicationInfo = &app,
                                .enabledExtensionCount = n_ext, .ppEnabledExtensionNames = ext,
                                .enabledLayerCount = validate ? 1 : 0, .ppEnabledLayerNames = layers};
@@ -122,6 +122,14 @@ static bool has_ext(VkExtensionProperties *e, uint32_t n, const char *name) {
 }
 
 // Discrete GPU first (MHGU_GPU=<index> picks one); needs Vulkan 1.2 and a queue that can draw, compute and present.
+// The device can't run the game: the player sees why, not "the details are in log.txt" (which a phone can't easily open)
+static void no_vulkan_1_2(const char *why) {
+    LOG("[vk] %s (Vulkan 1.2 required)\n", why);
+    plat_error_box("This device's GPU driver does not support Vulkan 1.2, which the game needs. A system or GPU driver "
+                   "update may help.");
+    exit(1);
+}
+
 static void pick_device(void) {
     uint32_t n = 0;
     vkEnumeratePhysicalDevices(g_vk.inst, &n, NULL);
@@ -139,7 +147,7 @@ static void pick_device(void) {
         if ((int)i == want) score = 100;
         if (score > best_score) { best_score = score; best = (int)i; }
     }
-    if (best < 0) FATAL("no Vulkan 1.2 device\n");
+    if (best < 0) no_vulkan_1_2("no Vulkan 1.2 device");
     g_vk.phys = pd[best];
     free(pd);
     vkGetPhysicalDeviceProperties(g_vk.phys, &g_vk.props);
@@ -174,7 +182,6 @@ static void create_device(void) {
     if (g_vk.stencil_export) ext[n_ext++] = VK_EXT_SHADER_STENCIL_EXPORT_EXTENSION_NAME;
     no_exclusive = surface_caps2 && has_ext(ep, ne, "VK_EXT_full_screen_exclusive") && !getenv("MHGU_VK_EXCLUSIVE");
     if (no_exclusive) ext[n_ext++] = "VK_EXT_full_screen_exclusive";
-    bool fsr4 = g_config.fsr && g_config.fsr_upscaler == FSR_UP_4 && vk_fsr4_device_exts(ep, ne, ext, &n_ext);  // FSR 4: its extensions
     free(ep);
 
     // optional features: whatever the GPU has of what the backend can use
@@ -186,7 +193,7 @@ static void create_device(void) {
     VkPhysicalDeviceVulkan11Features f11_have = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES, .pNext = &f12_have};
     VkPhysicalDeviceFeatures2 have = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &f11_have};
     vkGetPhysicalDeviceFeatures2(g_vk.phys, &have);
-    if (!f12_have.timelineSemaphore) FATAL("the GPU driver has no timeline semaphores (Vulkan 1.2 required)\n");
+    if (!f12_have.timelineSemaphore) no_vulkan_1_2("the GPU driver has no timeline semaphores");
     g_vk.divisor = g_vk.divisor && div_have.vertexAttributeInstanceRateDivisor;
     g_vk.custom_border = g_vk.custom_border && cbc_have.customBorderColors && cbc_have.customBorderColorWithoutFormat;
 
@@ -211,7 +218,7 @@ static void create_device(void) {
     b->logicOp = h->logicOp;
     b->fillModeNonSolid = h->fillModeNonSolid;
     b->samplerAnisotropy = h->samplerAnisotropy;
-    b->textureCompressionBC = h->textureCompressionBC;
+    b->textureCompressionBC = g_vk.bc = h->textureCompressionBC && !(getenv("MHGU_NO_BC") && atoi(getenv("MHGU_NO_BC")));
     b->textureCompressionASTC_LDR = h->textureCompressionASTC_LDR;
     b->shaderInt64 = h->shaderInt64;
     b->depthBiasClamp = h->depthBiasClamp;
@@ -231,7 +238,6 @@ static void create_device(void) {
         b->shaderStorageImageReadWithoutFormat = h->shaderStorageImageReadWithoutFormat;
         f12.shaderFloat16 = b->shaderInt16 = g_vk.fsr_fp16 = f12_have.shaderFloat16 && h->shaderInt16;  // (both, or neither)
     }
-    if (fsr4) vk_fsr4_device_features(&f11, &f12, b);  // FSR 4: cooperative matrix, float8... (only when asked for)
     if (!h->shaderInt64) LOG("[vk] warning: no shaderInt64 (64-bit address math in shaders)\n");
     float prio = 1.0f;
     VkDeviceQueueCreateInfo qi = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, .queueFamilyIndex = g_vk.qfam,
@@ -239,9 +245,12 @@ static void create_device(void) {
     VkDeviceCreateInfo di = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = &f, .queueCreateInfoCount = 1,
                              .pQueueCreateInfos = &qi, .enabledExtensionCount = n_ext, .ppEnabledExtensionNames = ext};
     VK_CHECK(vkCreateDevice(g_vk.phys, &di, NULL, &g_vk.dev));
+    g_vk.get_semaphore_counter = (PFN_vkGetSemaphoreCounterValue)vkGetDeviceProcAddr(g_vk.dev, "vkGetSemaphoreCounterValue");
+    g_vk.wait_semaphores = (PFN_vkWaitSemaphores)vkGetDeviceProcAddr(g_vk.dev, "vkWaitSemaphores");
+    if (!g_vk.get_semaphore_counter || !g_vk.wait_semaphores) no_vulkan_1_2("the GPU driver has no vkWaitSemaphores");
     vkGetDeviceQueue(g_vk.dev, g_vk.qfam, 0, &g_vk.queue);
     LOG("[vk] features: divisor %d, custom border %d, BC %d, ASTC %d, exclusive full screen off %d\n", g_vk.divisor,
-        g_vk.custom_border, h->textureCompressionBC, h->textureCompressionASTC_LDR, no_exclusive);
+        g_vk.custom_border, g_vk.bc, h->textureCompressionASTC_LDR, no_exclusive);
 
     // MSAA (settings): as many samples as asked for that colour and depth attachments both support and shaders can
     // read from depth (its resolve is a shader: exec.c vk_ms_resolve)
@@ -365,12 +374,22 @@ static void create_swapchain(void) {
     uint32_t count = caps.minImageCount + 1 < 3 ? 3 : caps.minImageCount + 1;
     if (caps.maxImageCount && count > caps.maxImageCount) count = caps.maxImageCount;
     if (count > 8) count = 8;
+    // The window image is drawn upright and the system turns it to the screen (a phone's screen is portrait at
+    // heart: in landscape currentTransform is a quarter turn, which would show the upright image squashed).
+    VkSurfaceTransformFlagBitsKHR xf = caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
+                                           ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR : caps.currentTransform;
+#ifdef __ANDROID__
+    // (the image then has the window's shape: some drivers give currentExtent in the screen's own portrait shape)
+    if (xf == VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR && (w > h) != (ext.width > ext.height))
+        ext = (VkExtent2D){ext.height, ext.width};
+    LOG("[vk] window %dx%d, screen turned %#x\n", w, h, caps.currentTransform);
+#endif
     VkSwapchainKHR old = g_vk.swapchain;
     VkSwapchainCreateInfoKHR ci = {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR, .surface = g_vk.surface, .minImageCount = count,
         .imageFormat = sf.format, .imageColorSpace = sf.colorSpace, .imageExtent = ext, .imageArrayLayers = 1,
         .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-        .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, .preTransform = caps.currentTransform,
+        .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, .preTransform = xf,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, .presentMode = present_mode(), .clipped = VK_TRUE,
         .oldSwapchain = old};
     FullScreenExclusiveInfo fse = {.sType = VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT,
@@ -445,7 +464,7 @@ static bool frame_begin(void) {
     cur_frame.ok = false;
     int w, h;
     SDL_GetWindowSizeInPixels(ui_window(), &w, &h);
-    if (!w || !h) return false;  // minimised
+    if (!w || !h || ui_window_away()) return false;  // minimised (or the window going away: ui.c)
     // All GPU mutations happen here under vk_lock(), after resolving the old
     // scene. Existing attachment caches defer old image destruction safely.
     int msaa = config_live_msaa();
@@ -527,7 +546,13 @@ static void frame_end(const char *shot_path) {
     VkPresentInfoKHR pi = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 1, .pWaitSemaphores = &done_sem[img],
                            .swapchainCount = 1, .pSwapchains = &g_vk.swapchain, .pImageIndices = &img};
     VkResult r = vkQueuePresentKHR(g_vk.queue, &pi);
+    // (Android says SUBOPTIMAL whenever the system turns the image: a new swapchain would be no better. A new
+    // window size is caught in frame_begin.)
+#ifdef __ANDROID__
+    if (r == VK_ERROR_OUT_OF_DATE_KHR) recreate_swapchain();
+#else
     if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) recreate_swapchain();
+#endif
     cur_frame.ok = false;
     if (shot_path) {  // (the copy is taken here; the PNG is made on a thread of its own: encoding the window's size
                       // stalled the game ~0.8 s on a Retina Mac)
@@ -547,6 +572,10 @@ static void frame_end(const char *shot_path) {
 
 void vk_save_png(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h) {
     SDL_Surface *s = SDL_CreateSurfaceFrom((int)w, (int)h, SDL_PIXELFORMAT_ABGR8888, (void *)rgba, (int)w * 4);
+#ifdef __ANDROID__
+    char abs[1400], cwd[1024];  // (Android's SDL opens a relative path inside the APK's assets: from the app's folder)
+    if (path[0] != '/' && getcwd(cwd, sizeof cwd)) snprintf(abs, sizeof abs, "%s/%s", cwd, path), path = abs;
+#endif
     if (!s || !SDL_SavePNG(s, path)) LOG("[vk] saving %s failed: %s\n", path, SDL_GetError());
     else LOG("[vk] saved %s (%ux%u)\n", path, w, h);
     SDL_DestroySurface(s);
