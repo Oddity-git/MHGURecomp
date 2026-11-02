@@ -940,14 +940,6 @@ the unwinder's backtrace; umask 007; the startup messages name the Android folde
 VulkanMemoryAllocator 3.4.0's header vendored in third_party/vk_mem_alloc (the Windows build keeps MSYS2's). Windows
 rebuilt and quick-hunted after it: unchanged.
 
-## FSR 4 removed (2026-11-01)
-
-`Upscaler = FSR4` is gone: fsr4.c / fsr4.h, third_party/ffx-api, docs/FSR4-PORT.md, the FSR4_DRIVER_PATCH build option
-and the settings row. A release could only use it with a loader DLL the player supplied, the maintainer's GPU can't test
-it, and bundling AMD's SDK DLLs (PR 168) would add 36 MB (uncompressed) for few players. FSR 3.1 stays. An ini that still
-has `Upscaler = ...` loads as before: the line is logged as an unknown setting, ignored and kept. The instance asks for
-Vulkan 1.2 in every case now.
-
 ## Next steps
 1. Modding tools: decode resident.arc tables (weapon00..14 Base/Level data: record layouts derivable from the game
    code that reads them), monster files per `arc/enemy/emXXX_YY.arc` (`attackdata`, `bodydata`, `dtbase`,

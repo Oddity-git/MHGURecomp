@@ -561,13 +561,16 @@ int main() {
     confirm();
     assert(settings_panel_dirty());
     down();
+    selected("fsr.provider");
+    press(ImGuiKey_GamepadDpadRight);
+    down();
     selected("fsr.quality");
     press(ImGuiKey_GamepadDpadRight);
     press(ImGuiKey_End);
     press(ImGuiKey_GamepadDpadUp);
     selected("save");
     confirm();
-    assert(config_editable().fsr == 1);
+    assert(config_editable().fsr == 1 && config_editable().fsr_upscaler == FSR_UP_4);
     assert(config_editable().fsr_quality == FSR_QUALITY);
     Config fsr_saved = config_editable();
     assert(config_restart_required(&fsr_saved));

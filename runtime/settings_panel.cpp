@@ -265,6 +265,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(render_h);
     SAME(fps);
     SAME(fsr);
+    SAME(fsr_upscaler);
     SAME(fsr_quality);
     SAME(fsr_sharpness);
     SAME(fsr_objmotion);
@@ -733,6 +734,7 @@ void reset_section() {
         break;
     case 1:
         c.fsr = f.fsr;
+        c.fsr_upscaler = f.fsr_upscaler;
         c.fsr_quality = f.fsr_quality;
         c.fsr_sharpness = f.fsr_sharpness;
         c.fsr_objmotion = f.fsr_objmotion;
@@ -1108,6 +1110,14 @@ std::vector<Row> main_rows() {
         add_bool(r, "smooth", "Smooth gradients", &c.smooth_gradients, ini("SmoothGradients"));
         add_bool(r, "fsr", "FSR", &c.fsr, ini("FSR"));
         if (c.fsr) {
+            add_choice(
+                r, "fsr.provider", "Upscaler", c.fsr_upscaler, {"FSR 3.1", "FSR 4"},
+                [](int v) { s.draft.fsr_upscaler = v; }, ini("Upscaler"));
+            if (g_fsr4_fallback && c.fsr_upscaler == FSR_UP_4 && g_config.fsr && g_config.fsr_upscaler == FSR_UP_4) {
+                r.back().value += std::string(" (") + tr("FSR 3.1 in use") + ")";  // (fsr4.c: FSR 4 didn't start)
+                r.back().warn = true;
+                r.back().help = tr(g_fsr4_fallback);
+            }
             add_choice(
                 r, "fsr.quality", "FSR quality", c.fsr_quality,
                 {tr("Native AA"), tr("Quality"), tr("Balanced"), tr("Performance"), tr("Ultra performance")},
