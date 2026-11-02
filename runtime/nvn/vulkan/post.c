@@ -69,6 +69,7 @@ static const char PRELUDE[] =
     "    vec4 state;  // x: a slowly following height, the camera's minus 300 (world units; fog base); y: outdoors, 0..1\n"
     "                 // (0 under a roof or in a cave: what is above the camera is near; follows in about a second); w: 1 = set\n"
     "    vec4 sun;    // towards the sun / moon (world space, unit length; kept while it is out of view), 1 = seen\n"
+    "    vec4 glow;   // the sun / moon's colour and (a) strength, followed slowly and kept while it is out of view\n"
     "} u_light;\n"
     "layout(set = 0, binding = 6, std140) uniform Settings { vec4 v[256]; } u_set;  // (the settings' values)\n"
     "float raw_depth(vec2 uv) { return textureLod(u_depth, uv, 0.0).r; }\n"
@@ -163,7 +164,10 @@ static const char LIGHT_MAIN[] =
     "    u_light.color = vec4(found ? s_v[0].rgb / wt : vec3(1.0), th);\n"
     "    bool init = u_light.state.w > 0.5;\n"
     "    vec3 sky = n_sky > 0.0 ? sky_rgb : u_light.sky.rgb;\n"
-    "    u_light.sky = vec4(init ? mix(u_light.sky.rgb, sky, 0.05) : sky, n_sky / float(total));\n"
+    "    float sky_rate = 0.03 * clamp(n_sky / (float(total) * 0.05), 0.0, 1.0);  // (slower with little sky in view)\n"
+    "    u_light.sky = vec4(init ? mix(u_light.sky.rgb, sky, sky_rate) : sky, n_sky / float(total));\n"
+    "    if (found) u_light.glow = init ? mix(u_light.glow, vec4(u_light.color.rgb, u_light.pos.z), 0.03) : vec4(u_light.color.rgb, u_light.pos.z);\n"
+    "    else if (!init) u_light.glow = vec4(1.0, 1.0, 1.0, 0.0);\n"
     "    float base = u.eye.y - 300.0;\n"
     "    float outdoors = init ? u_light.state.y : 1.0;  // (looking down: kept as it was)\n"
     "    if (up_all.x >= 8.0) outdoors = mix(outdoors, up_all.y / up_all.x > 0.25 ? 1.0 : 0.0, 0.03);\n"
@@ -187,7 +191,7 @@ typedef struct {
 } FrameU;
 
 #define MAX_PASS 32
-#define LIGHT_BYTES 80  // (u_light: five vec4)
+#define LIGHT_BYTES 96  // (u_light: six vec4)
 typedef struct {
     char name[160];  // mod/file, for the log
     VkPipeline pipe;
