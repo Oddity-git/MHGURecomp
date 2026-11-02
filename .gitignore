@@ -33,5 +33,5 @@ server/mhgurecomp-hubserver.exe
 /build-android/
 /obj-android/
 
-# AMD FSR SDK DLLs and licence, downloaded by the build (see Makefile FSR_SDK)
+# AMD FSR SDK DLLs and licence, downloaded by the build (make fsr4-plugin)
 third_party/fsr-sdk/

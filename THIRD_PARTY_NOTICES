@@ -8,9 +8,9 @@ below.
 - cimgui (third_party/cimgui): MIT License.
 - Dear ImGui (third_party/cimgui/imgui): MIT License.
 - AMD FidelityFX SDK 1.1.4 (third_party/fsr-vulkan/upstream/ffx-1.1.4): the FSR 3.1 upscaler's host code, Vulkan
-  backend and shaders; and, from AMD's FSR SDK 2.4.0, the ffx-api headers (third_party/ffx-api). MIT License, Copyright (C) 2024-2026 Advanced Micro
+  backend and shaders; and, from AMD's FSR SDK 2.4.0, the ffx-api headers (plugins/fsr4/ffx-api, used only by the FSR 4 mod plugin, which is built apart from the program). MIT License, Copyright (C) 2024-2026 Advanced Micro
   Devices, Inc.; the licence files are kept beside the code (third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk/LICENSE.txt,
-  third_party/ffx-api/LICENSE.txt) and reproduced below.
+  plugins/fsr4/ffx-api/LICENSE.txt) and reproduced below.
 - FSR-Vulkan (third_party/fsr-vulkan: the portable C wrapper and build glue around the SDK;
   github.com/FireBurn/FSR-Vulkan): MIT License, see third_party/fsr-vulkan/LICENSE.txt, NOTICE.md and UPSTREAM.md
   (the files changed against AMD's originals are listed there).
@@ -24,10 +24,11 @@ the GCC runtime linked in) keep their own licenses. The Windows build collects t
 in into build/licenses (README.txt there lists each with its version and source); the Vulkan loader is the GPU
 driver's and is not shipped.
 
-The Windows release also carries two of AMD's signed binaries from the FSR SDK 2.4.0, unmodified, for the optional
-FSR 4 mode: amd_fidelityfx_loader_vk.dll and amd_fidelityfx_upscaler_vk.dll. They are not in this repository (the build
-downloads them from AMD's tagged release and checks their SHA-256) and are not covered by this program's license: they are
-used under AMD's own redistribution license, which build/licenses/AMD-FSR-SDK.txt reproduces.
+The optional FSR 4 mod (plugins/fsr4, built apart with `make fsr4-plugin`; not part of this program's release) carries two of
+AMD's signed binaries from the FSR SDK 2.4.0, unmodified: amd_fidelityfx_loader_vk.dll and amd_fidelityfx_upscaler_vk.dll. They
+are not in this repository (the build downloads them from AMD's tagged release and checks their SHA-256) and are not covered by
+this program's license: they are used under AMD's own redistribution license, which the mod's upscaler/AMD-FSR-SDK-LICENSE.txt
+reproduces.
 
 
 ================================================================================
