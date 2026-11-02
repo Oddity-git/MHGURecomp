@@ -4,6 +4,8 @@
 # them whole, for symbols in crash backtraces), aligned (zipalign) and signed (apksigner).
 #   make PLATFORM=android ABI=x86_64            build-android/mhgurecomp.apk: every ABI built so far
 #                                                 (build-android/lib/<abi>/), signed with the SDK's debug key
+#   make PLATFORM=android ... TEST_APP=1       a test build that installs beside the official app (own package id, own game
+#                                              folder and save, labelled "(test)"), so neither has to be uninstalled for the other
 #   make PLATFORM=android ABI=x86_64 install    that APK onto the running emulator / the connected phone (adb)
 #   make PLATFORM=android dist VERSION=0.13.0   the release: dist/Android-MHGURecomp.<version>.apk, arm64-v8a only,
 #                                                 signed with the release key (on Windows, make dist does this too)
@@ -48,9 +50,10 @@ cp $(SDL_DEPS) $(B)/lib/$(ABI)/
 rm -rf $(APK_O)/assets && mkdir -p $(APK_O)/assets/bonus && cp extras/pipelines.list $(APK_O)/assets/ && \
     cp -r $(B)/licenses $(APK_O)/assets/ $(if $(BONUS),&& cp "$(BONUS)" $(APK_O)/assets/bonus/system)
 "$(BUILD_TOOLS)/aapt2" compile --dir android/res -o $(APK_O)/res.zip
-"$(BUILD_TOOLS)/aapt2" link -o $(APK_O)/base.apk --manifest android/AndroidManifest.xml -I "$(call win_path,$(ANDROID_JAR))" \
+sed 's/android:label="MHGU Recomp"/android:label="MHGU Recomp$(if $(TEST_APP), (test))"/' android/AndroidManifest.xml > $(APK_O)/AndroidManifest.xml
+"$(BUILD_TOOLS)/aapt2" link -o $(APK_O)/base.apk --manifest $(APK_O)/AndroidManifest.xml -I "$(call win_path,$(ANDROID_JAR))" \
     -A $(APK_O)/assets $(APK_O)/res.zip --min-sdk-version $(API) --target-sdk-version $(TARGET_API) \
-    --version-code $(APK_VERSION_CODE) --version-name $(VERSION)
+    --version-code $(APK_VERSION_CODE) --version-name $(VERSION) $(if $(TEST_APP),--rename-manifest-package io.github.morerokk.mhgurecomp.test)
 rm -rf $(APK_O)/lib && for a in $(2); do mkdir -p $(APK_O)/lib/$$a; \
     for f in $(B)/lib/$$a/*.so; do "$(LLVM)/llvm-strip" --strip-debug -o $(APK_O)/lib/$$a/$$(basename $$f) $$f || exit 1; done; done
 $(PY) android/apk.py $(APK_O)/base.apk $(APK_O)/unaligned.apk $(APK_O)/classes.dex $(APK_O)/lib
