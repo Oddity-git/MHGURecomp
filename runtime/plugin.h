@@ -1,11 +1,11 @@
-// The upscaler plugin interface: a mod may bring its own upscaler as a native library (a "plugin"), which the renderer uses
-// instead of FSR 3.1 when [Upscaler] Upscaler = FSR4 (the plugin's name for the setting's second choice). The core knows nothing
-// about what the plugin is: FSR 4 (plugins/fsr4) is one, and ships as a mod, not as part of the program.
+// The plugin interface: a mod may bring native code as a library (a "plugin"). Drop-in, like Forge's plugins: a mod folder with
+// plugins/*.dll (Windows) or plugins/*.so (Linux) loads them whenever the mod is turned on in the Mods tab, with nothing to set up.
+// A plugin says what it provides (today: an upscaler, used instead of FSR 3.1 when [Upscaler] Upscaler = FSR4); the core knows
+// nothing else about it. FSR 4 (plugins/fsr4) is one, and ships as a mod, not as part of the program.
 //
-// Where: <mods>/<mod>/upscaler/*.dll (Windows) or *.so (Linux) in a mod that is turned on; the first one found is used.
 // The library exports one function:
-//     const UpscalerPlugin *mhgu_upscaler_get(uint32_t host_abi);
-// which returns NULL if it does not know that host_abi. All calls come from the render thread (device_exts and
+//     const MhguPlugin *mhgu_plugin_get(uint32_t host_abi);
+// which returns NULL if it does not know that host_abi. A plugin that provides nothing this program knows is ignored. All calls come from the render thread (device_exts and
 // device_features from the thread that creates the Vulkan device), never at the same time.
 //
 // Order: device_exts (instance and physical device exist) -> device_features -> the device is created -> init (device
@@ -13,14 +13,14 @@
 // features) has to be asked for in the first two, since the device cannot be changed afterwards. Failing is always allowed:
 // the core logs it and goes on with FSR 3.1. After dispatch returns false it is not called again.
 //
-// Native code in a mod runs with the player's rights, like any program: only install plugins from people you trust. The
-// core loads a plugin only if the player chose its setting.
+// Native code in a mod runs with the player's rights, like any program: only install plugins from people you trust. The log
+// names each one loaded; turning the mod off keeps it from loading.
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
 #include <vulkan/vulkan.h>
 
-#define MHGU_UPSCALER_ABI 1  // changes (and stays 1 until then) only when this header does in a way old plugins cannot follow
+#define MHGU_PLUGIN_ABI 1  // changes (and stays 1 until then) only when this header does in a way old plugins cannot follow
 
 typedef struct {
     VkImage image;
@@ -52,7 +52,6 @@ typedef struct UpscalerHost {
 } UpscalerHost;
 
 typedef struct UpscalerPlugin {
-    uint32_t abi;                   // MHGU_UPSCALER_ABI
     uint32_t vulkan_api;            // the Vulkan API version the instance needs, e.g. VK_API_VERSION_1_3 (0: the core's own); read
                                     // before the instance is created, so nothing but get() runs before it
     // The device extensions to add (append to ext, up to 8 more) and the core's feature chains
@@ -68,3 +67,11 @@ typedef struct UpscalerPlugin {
     const char *(*fallback_reason)(void);
     void (*shutdown)(void);                     // optional
 } UpscalerPlugin;
+
+// What a plugin library returns from mhgu_plugin_get. More kinds of things a plugin can provide are added as more members
+// at the end (the ABI number moves only when an existing member changes).
+typedef struct MhguPlugin {
+    uint32_t abi;                    // MHGU_PLUGIN_ABI
+    const char *name;                // for the log and the Mods tab
+    const UpscalerPlugin *upscaler;  // NULL: none
+} MhguPlugin;

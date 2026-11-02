@@ -27,7 +27,7 @@ driver's and is not shipped.
 The optional FSR 4 mod (plugins/fsr4, built apart with `make fsr4-plugin`; not part of this program's release) carries two of
 AMD's signed binaries from the FSR SDK 2.4.0, unmodified: amd_fidelityfx_loader_vk.dll and amd_fidelityfx_upscaler_vk.dll. They
 are not in this repository (the build downloads them from AMD's tagged release and checks their SHA-256) and are not covered by
-this program's license: they are used under AMD's own redistribution license, which the mod's upscaler/AMD-FSR-SDK-LICENSE.txt
+this program's license: they are used under AMD's own redistribution license, which the mod's plugins/amd/AMD-FSR-SDK-LICENSE.txt
 reproduces.
 
 

@@ -1,4 +1,4 @@
-// FSR 4 as an upscaler plugin (runtime/upscaler_plugin.h): a native library that goes into a mod, mods/<mod>/upscaler/, with
+// FSR 4 as an upscaler plugin (runtime/plugin.h): a native library that goes into a mod, mods/<mod>/plugins/, with
 // AMD's FSR SDK 2.4 DLLs beside it. It is built apart from the program (make fsr4-plugin) and is not part of it.
 //
 // AMD's FSR SDK 2.4 ships signed Vulkan DLLs: amd_fidelityfx_loader_vk.dll (the public ffx-api) and, beside it,
@@ -16,7 +16,7 @@
 #include <string.h>
 #include <vulkan/vulkan.h>
 
-#include "../../runtime/upscaler_plugin.h"
+#include "../../runtime/plugin.h"
 
 #define EXPORT __declspec(dllexport)
 static const UpscalerHost *H;
@@ -182,12 +182,12 @@ static bool init_loader(void) {
     wchar_t path[MAX_PATH] = {0};
     const char *env = getenv("MHGU_FSR4_LOADER");
     if (env) MultiByteToWideChar(CP_UTF8, 0, env, -1, path, MAX_PATH);
-    else if (H->dir && MultiByteToWideChar(CP_UTF8, 0, H->dir, -1, path, MAX_PATH)) {  // beside this plugin
+    else if (H->dir && MultiByteToWideChar(CP_UTF8, 0, H->dir, -1, path, MAX_PATH)) {  // in amd\ beside this plugin (the program loads every library in plugins/ itself, so AMD's stay one folder down)
         for (wchar_t *c = path; *c; c++) if (*c == L'/') *c = L'\\';
-        wcscat(path, L"\\amd_fidelityfx_loader_vk.dll");
+        wcscat(path, L"\\amd\\amd_fidelityfx_loader_vk.dll");
     }
     if (!path[0] || GetFileAttributesW(path) == INVALID_FILE_ATTRIBUTES) {
-        LOG("[fsr4] amd_fidelityfx_loader_vk.dll not found (beside the plugin, or MHGU_FSR4_LOADER=<path>): FSR 3.1 is used\n");
+        LOG("[fsr4] amd_fidelityfx_loader_vk.dll not found (plugins/amd/ beside the plugin, or MHGU_FSR4_LOADER=<path>): FSR 3.1 is used\n");
         return false;
     }
     HMODULE ld = LoadLibraryExW(path, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
@@ -332,8 +332,7 @@ static bool p_dispatch(const UpscalerDispatch *d) {
     return true;
 }
 
-static const UpscalerPlugin plugin = {
-    .abi = MHGU_UPSCALER_ABI,
+static const UpscalerPlugin upscaler = {
     .vulkan_api = VK_API_VERSION_1_3,  // (FSR 4's shaders use SPIR-V 1.6)
     .device_exts = p_device_exts,
     .device_features = p_device_features,
@@ -343,4 +342,6 @@ static const UpscalerPlugin plugin = {
     .fallback_reason = p_reason,
 };
 
-EXPORT const UpscalerPlugin *mhgu_upscaler_get(uint32_t host_abi) { return host_abi == MHGU_UPSCALER_ABI ? &plugin : NULL; }
+static const MhguPlugin plugin = {.abi = MHGU_PLUGIN_ABI, .name = "FSR 4 (AMD FSR SDK 2.4)", .upscaler = &upscaler};
+
+EXPORT const MhguPlugin *mhgu_plugin_get(uint32_t host_abi) { return host_abi == MHGU_PLUGIN_ABI ? &plugin : NULL; }

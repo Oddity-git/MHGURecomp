@@ -1,7 +1,7 @@
 # FSR 4 upscaler (2026-10-26, moved to AMD's FSR SDK 2.4.0 on 2026-11-01)
 
 > **Plugin layout.** FSR 4 is no longer part of the program: the program only has the upscaler plugin interface
-> (`runtime/upscaler_plugin.h`, host in `runtime/nvn/vulkan/fsr4.c`), and the FSR 4 code of this document lives in
+> (`runtime/plugin.h`, host in `runtime/nvn/vulkan/fsr4.c`), and the FSR 4 code of this document lives in
 > `plugins/fsr4/` as a mod (`make fsr4-plugin`, see `plugins/fsr4/README.md`). Paths below that say `runtime/nvn/vulkan/fsr4.c`,
 > `third_party/ffx-api` or "the build bundles the DLLs" refer to `plugins/fsr4/fsr4_plugin.c`, `plugins/fsr4/ffx-api` and the mod
 > folder. The DLLs are looked up beside the plugin, not beside the exe.

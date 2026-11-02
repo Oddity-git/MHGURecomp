@@ -1,9 +1,9 @@
-// The upscaler plugin host (runtime/upscaler_plugin.h): [Upscaler] Upscaler = FSR4 uses the upscaler a mod brings as a native
+// The upscaler plugin host (runtime/plugin.h): [Upscaler] Upscaler = FSR4 uses the upscaler a mod brings as a native
 // library (FSR 4 is one: plugins/fsr4, built apart from the program), dispatched where FSR 3.1's would be. Without a
 // plugin, or when it cannot start on this GPU, everything here says "no" and fsr.c keeps using FSR 3.1.
 #pragma once
 #include "vk.h"
-#include "../../upscaler_plugin.h"
+#include "../../plugin.h"
 
 typedef UpscalerImage Fsr4Image;
 typedef UpscalerDispatch Fsr4Dispatch;

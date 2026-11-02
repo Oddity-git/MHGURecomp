@@ -200,7 +200,7 @@ $(O)/fsr/src/ffx_fsr3_glsl.c.o: FSRFLAGS += -DFFX_GPU_DIR='"$(FFX_GPU)"' -DFFX_P
 $(O)/fsr/src/ffx_fsr3_glsl.c.o: $(wildcard $(FFX_GPU)/*.h $(FFX_GPU)/*/*.h $(FFX_PASS)/*.glsl)
 RTFLAGS  += -I$(FSR)/include
 .DEFAULT_GOAL := all
-# FSR 4 is an upscaler plugin (runtime/upscaler_plugin.h, plugins/fsr4), built apart from the program: `make fsr4-plugin` (Windows)
+# FSR 4 is an upscaler plugin (runtime/plugin.h, plugins/fsr4), built apart from the program: `make fsr4-plugin` (Windows)
 # makes build/mods/FSR4/ with the plugin DLL and AMD's FSR SDK 2.4.0 loader and upscaler DLLs beside it (their licence in the same
 # folder). They are AMD's signed binaries, redistributable unmodified in binary form with AMD's licence text; they are not in this
 # repository, the build downloads them from AMD's tagged SDK release once and checks them against their SHA-256. None of it is
@@ -339,15 +339,15 @@ $(eval $(call FETCH,$(FSR_SDK_DIR)/license.md,$(FSR_SDK_URL)/docs/license.md,323
 
 # The FSR 4 upscaler mod: make fsr4-plugin (Windows only; needs the Vulkan SDK headers with VK_EXT_shader_float8)
 .PHONY: fsr4-plugin
-fsr4-plugin: $(FSR4_MOD)/upscaler/mhgu_fsr4.dll $(addprefix $(FSR4_MOD)/upscaler/,$(FSR_SDK_DLLS)) $(FSR4_MOD)/upscaler/AMD-FSR-SDK-LICENSE.txt
+fsr4-plugin: $(FSR4_MOD)/plugins/mhgu_fsr4.dll $(addprefix $(FSR4_MOD)/plugins/amd/,$(FSR_SDK_DLLS)) $(FSR4_MOD)/plugins/amd/AMD-FSR-SDK-LICENSE.txt
 	@echo "FSR 4 mod: $(FSR4_MOD) (copy the folder into mods/)"
-$(FSR4_MOD)/upscaler/mhgu_fsr4.dll: plugins/fsr4/fsr4_plugin.c runtime/upscaler_plugin.h $(wildcard plugins/fsr4/ffx-api/*.h plugins/fsr4/ffx-api/vk/*.h)
+$(FSR4_MOD)/plugins/mhgu_fsr4.dll: plugins/fsr4/fsr4_plugin.c runtime/plugin.h $(wildcard plugins/fsr4/ffx-api/*.h plugins/fsr4/ffx-api/vk/*.h)
 	@mkdir -p $(dir $@)
 	$(CC) -O2 -g -shared -Wall -Wno-ignored-attributes -Iplugins/fsr4/ffx-api $< -o $@ -lversion
-$(FSR4_MOD)/upscaler/amd_fidelityfx_%_vk.dll: $(FSR_SDK_DIR)/amd_fidelityfx_%_vk.dll
+$(FSR4_MOD)/plugins/amd/amd_fidelityfx_%_vk.dll: $(FSR_SDK_DIR)/amd_fidelityfx_%_vk.dll
 	@mkdir -p $(dir $@)
 	cp $< $@
-$(FSR4_MOD)/upscaler/AMD-FSR-SDK-LICENSE.txt: $(FSR_SDK_DIR)/license.md
+$(FSR4_MOD)/plugins/amd/AMD-FSR-SDK-LICENSE.txt: $(FSR_SDK_DIR)/license.md
 	@mkdir -p $(dir $@)
 	@{ echo "This mod ships AMD's FSR SDK $(FSR_SDK_VER) DLLs, unmodified, in binary form: amd_fidelityfx_loader_vk.dll and"; \
 	   echo "amd_fidelityfx_upscaler_vk.dll (FSR 4 upscaling), from https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK"; \
